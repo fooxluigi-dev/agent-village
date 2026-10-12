@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Agent Village — Phase 1</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a;color:#e8e8e8;
+    font-family:ui-monospace,Menlo,monospace;-webkit-user-select:none;user-select:none}
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:14px;align-items:center;
+    padding:10px 12px;background:linear-gradient(#0a0a0af2,#0a0a0a00);font-size:14px;z-index:5;flex-wrap:wrap}
+  .gold{color:#d4a017}
+  button{background:#1a1a1a;color:#e8e8e8;border:1px solid #333;border-radius:6px;
+    padding:4px 10px;font:inherit;cursor:pointer}
+  button.on{border-color:#d4a017;color:#d4a017}
+  #panel{position:fixed;left:0;right:0;bottom:0;padding:10px 14px 14px;background:#0a0a0af2;
+    border-top:1px solid #222;z-index:5;display:none}
+  #panel.show{display:block}
+  .row{display:flex;justify-content:space-between;font-size:13px;margin:4px 0 2px}
+  .bar{height:8px;background:#222;border-radius:4px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0}
+  h3{margin:0 0 4px;font-size:15px;color:#d4a017}
+  #hint{position:fixed;bottom:6px;right:12px;font-size:11px;color:#666;z-index:4}
+</style>
+</head>
+<body>
+<div id="hud">
+  <span class="gold">🏛 AGENT VILLAGE</span>
+  <span>🌾 <b id="hFood">0</b></span>
+  <span>💰 <b id="hMoney">0</b></span>
+  <span>📅 day <b id="hDay">1</b></span>
+  <button id="bPlay" class="on">⏸</button>
+  <button class="spd on" data-s="1">1×</button>
+  <button class="spd" data-s="2">2×</button>
+  <button class="spd" data-s="4">4×</button>
+</div>
+<div id="panel">
+  <h3 id="pName">—</h3>
+  <div class="row"><span id="pJob"></span><span id="pAct"></span></div>
+  <div class="row"><span>hunger</span><span id="vHx"></span></div>
+  <div class="bar"><i id="bHx" style="background:#ff6b6b"></i></div>
+  <div class="row"><span>energy</span><span id="vEn"></span></div>
+  <div class="bar"><i id="bEn" style="background:#5ac8fa"></i></div>
+  <div class="row"><span>money</span><span id="vMo"></span></div>
+  <div class="bar"><i id="bMo" style="background:#d4a017"></i></div>
+</div>
+<div id="hint">drag = rotate · pinch = zoom · tap a villager</div>
+
+<script id="sim">
+/* Pure simulation: no DOM, no THREE. Runs in the browser (window.SIM)
+   and in Node for tests (module.exports). */
+(function () {
+  var W = 16;
+  var JOBS = ['farmer', 'farmer', 'builder', 'builder', 'trader', 'idle'];
+  var NAMES = ['Ada', 'Bram', 'Cia', 'Dov', 'Ela', 'Fen'];
+  var HOMES = [[11, 2], [11, 7], [11, 12]];
+  var SPOT = { farm: [3, 3], site: [4, 12], market: [8, 8] };
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function createState(seed) {
+    var rnd = mulberry32(seed || 1);
+    var agents = NAMES.map(function (n, i) {
+      return {
+        id: i, name: n, job: JOBS[i],
+        x: 7 + rnd() * 2, y: 7 + rnd() * 2, tx: 8, ty: 8,
+        hx: 20 + rnd() * 30, en: 60 + rnd() * 30, money: 5,
+        w: { eat: 0.8 + rnd() * 0.6, sleep: 0.8 + rnd() * 0.6, work: 0.7 + rnd() * 0.8 },
+        act: 'wander', phase: 'rechoose', prog: 0
+      };
+    });
+    return { t: 0, food: 10, agents: agents, homes: HOMES, rnd: rnd,
+             stats: { foodMade: 0, foodEaten: 0, moneyMade: 0 } };
+  }
+
+  function setTarget(a, s, act) {
+    a.act = act; a.phase = 'move'; a.prog = 0;
+    var t;
+    if (act === 'eat') t = SPOT.market;
+    else if (act === 'sleep') { var h = s.homes[a.id % 3]; t = [h[0] - 1, h[1]]; }
+    else if (act === 'work') t = a.job === 'farmer' ? SPOT.farm
+                                : a.job === 'builder' ? SPOT.site : SPOT.market;
+    else t = [1 + Math.floor(s.rnd() * 14), 1 + Math.floor(s.rnd() * 14)];
+    a.tx = t[0]; a.ty = t[1];
+  }
+
+  function chooseAction(a, s) {
+    var sc = {
+      eat: a.hx > 20 ? a.hx * 1.2 * a.w.eat + (s.food > 0 ? 25 : a.money >= 2 ? 8 : 0) : 0,
+      sleep: a.en < 95 ? (100 - a.en) * a.w.sleep : 0,
+      work: a.job !== 'idle' && a.en > 32 && a.hx < 70
+              ? 50 * a.w.work + (100 - Math.min(a.money, 80)) : 0,
+      wander: 15
+    };
+    var best = 'wander';
+    for (var k in sc) if (sc[k] > sc[best]) best = k;
+    if (sc[a.act] > 0 && sc[a.act] >= sc[best] - 15) best = a.act; // hysteresis: avoid oscillation (dead actions never stick)
+    setTarget(a, s, best);
+  }
+
+  function doAction(a, s) { // returns true when the action is finished
+    var d;
+    if (a.act === 'eat') {
+      if (a.hx < 10) return true;
+      if (s.food > 0) { s.food--; a.hx = 0; s.stats.foodEaten++; return true; }
+      if (a.money >= 2) { a.money -= 2; a.hx = 0; s.stats.foodEaten++; return true; }
+      return true;
+    }
+    if (a.act === 'sleep') { a.en = Math.min(100, a.en + 6); return a.en >= 98; }
+    if (a.act === 'work') {
+      a.en = Math.max(0, a.en - 1.2);
+      a.hx = Math.min(100, a.hx + 0.4);
+      a.prog++;
+      if (a.prog % 4 === 0) {
+        if (a.job === 'farmer') { s.food++; s.stats.foodMade++; }
+        else if (a.job === 'builder') { a.money += 2; s.stats.moneyMade += 2; }
+        else { // trader: keep the granary stocked, else earn
+          if (s.food < 4 && a.money >= 2) { a.money -= 2; s.food++; }
+          else { a.money += 2; s.stats.moneyMade += 2; }
+        }
+      }
+      return a.en < 25 || a.hx > 75;
+    }
+    d = Math.hypot(a.tx - a.x, a.ty - a.y);
+    return d < 0.2;
+  }
+
+  function tick(s) {
+    s.t++;
+    for (var i = 0; i < s.agents.length; i++) {
+      var a = s.agents[i];
+      a.hx = Math.min(100, a.hx + 0.8);
+      if (a.en <= 0 && a.act !== 'sleep') { a.en = 1; setTarget(a, s, 'sleep'); continue; }
+      if (a.phase === 'move') {
+        var dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy);
+        if (d < 0.15) { a.phase = 'do'; }
+        else {
+          var st = Math.min(0.7, d);
+          a.x += dx / d * st; a.y += dy / d * st;
+          a.en = Math.max(0, a.en - (a.act === 'work' ? 0.5 : 0.25));
+          continue;
+        }
+      }
+      if (a.phase === 'do') {
+        if (doAction(a, s)) a.phase = 'rechoose';
+        continue;
+      }
+      chooseAction(a, s);
+    }
+  }
+
+  var api = { createState: createState, tick: tick, chooseAction: chooseAction, W: W };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else self.SIM = api;
+})();
+</script>
+
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+var S = SIM.createState(42);
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0a);
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+// ponytail: no shadow maps (mobile perf); add DirectionalLight shadows if it looks flat
+var camD = 16;
+function mkCam() {
+  var a = innerWidth / innerHeight;
+  return new THREE.OrthographicCamera(-camD * a, camD * a, camD, -camD, 0.1, 300);
+}
+var camera = mkCam();
+camera.position.set(18, 20, 18);
+camera.lookAt(0, 0, 0);
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = 1.45;
+controls.minZoom = 0.5; controls.maxZoom = 4;
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x223322, 0.9));
+var sun = new THREE.DirectionalLight(0xffffff, 0.7);
+sun.position.set(10, 20, 6);
+scene.add(sun);
+
+function W(gx) { return gx - 8; } // grid 0..15 -> world -8..7
+
+var ground = new THREE.Mesh(new THREE.PlaneGeometry(16, 16),
+  new THREE.MeshLambertMaterial({ color: 0x2f5e33 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+var grid = new THREE.GridHelper(16, 16, 0x3a7c40, 0x2a5c2f);
+grid.position.y = 0.01;
+scene.add(grid);
+
+// farm plot at grid (3,3)
+var farm = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 5),
+  new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
+farm.position.set(W(3), 0.06, W(3));
+scene.add(farm);
+for (var j = 0; j < 5; j++) {
+  var row = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.18, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0x4caf50 }));
+  row.position.set(W(3), 0.15, W(3) - 2 + j);
+  scene.add(row);
+}
+
+// houses
+S.homes.forEach(function (h) {
+  var body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 3),
+    new THREE.MeshLambertMaterial({ color: 0x6a625a }));
+  body.position.set(W(h[0]), 0.9, W(h[1]));
+  scene.add(body);
+  var roof = new THREE.Mesh(new THREE.ConeGeometry(2.4, 1.4, 4),
+    new THREE.MeshLambertMaterial({ color: 0x8b3a3a }));
+  roof.position.set(W(h[0]), 2.5, W(h[1]));
+  roof.rotation.y = Math.PI / 4;
+  scene.add(roof);
+});
+
+// market (granary) at grid (8,8) = world center
+var market = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.4),
+  new THREE.MeshLambertMaterial({ color: 0xd4a017 }));
+market.position.set(W(8), 0.7, W(8));
+scene.add(market);
+var mTop = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 1.4),
+  new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
+mTop.position.set(W(8), 1.8, W(8));
+scene.add(mTop);
+
+// build site at grid (4,12)
+var slab = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.7, 2.5),
+  new THREE.MeshLambertMaterial({ color: 0x555555 }));
+slab.position.set(W(4), 0.35, W(12));
+scene.add(slab);
+[[-1, -1], [1, 1]].forEach(function (o) {
+  var pole = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 0.3),
+    new THREE.MeshLambertMaterial({ color: 0x886633 }));
+  pole.position.set(W(4) + o[0], 1.3, W(12) + o[1]);
+  scene.add(pole);
+});
+
+// villagers
+var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b, 0x7ee787, 0xffa94d, 0xb197fc];
+var meshes = S.agents.map(function (a, i) {
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5),
+    new THREE.MeshLambertMaterial({ color: COLORS[i] }));
+  body.position.y = 0.4;
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xf0d0a0 }));
+  head.position.y = 1.05;
+  body.userData.aid = i; head.userData.aid = i;
+  g.add(body); g.add(head);
+  scene.add(g);
+  return { g: g, px: a.x, py: a.y };
+});
+
+// selection
+var selected = null;
+var down = null;
+renderer.domElement.addEventListener('pointerdown', function (e) { down = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', function (e) {
+  if (!down) return;
+  var moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
+  down = null;
+  if (moved > 10) return;
+  var v = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  var rc = new THREE.Raycaster();
+  rc.setFromCamera(v, camera);
+  var hits = rc.intersectObjects(renderer.domElement ? scene.children : [], true)
+    .filter(function (h) { return h.object.userData.aid !== undefined; });
+  selected = hits.length ? hits[0].object.userData.aid : null;
+  document.getElementById('panel').classList.toggle('show', selected !== null);
+});
+
+// HUD wiring
+var playing = true, speed = 1;
+document.getElementById('bPlay').onclick = function () {
+  playing = !playing;
+  this.textContent = playing ? '⏸' : '▶';
+  this.classList.toggle('on', playing);
+};
+Array.prototype.forEach.call(document.querySelectorAll('.spd'), function (b) {
+  b.onclick = function () {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.spd').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+  };
+});
+
+function updateHud() {
+  var money = S.agents.reduce(function (x, a) { return x + a.money; }, 0);
+  document.getElementById('hFood').textContent = S.food;
+  document.getElementById('hMoney').textContent = money;
+  document.getElementById('hDay').textContent = Math.floor(S.t / 60) + 1;
+  if (selected === null) return;
+  var a = S.agents[selected];
+  document.getElementById('pName').textContent = a.name;
+  document.getElementById('pJob').textContent = a.job;
+  document.getElementById('pAct').textContent = '→ ' + a.act + ' (' + a.phase + ')';
+  document.getElementById('vHx').textContent = Math.round(a.hx);
+  document.getElementById('vEn').textContent = Math.round(a.en);
+  document.getElementById('vMo').textContent = a.money;
+  document.getElementById('bHx').style.width = a.hx + '%';
+  document.getElementById('bEn').style.width = a.en + '%';
+  document.getElementById('bMo').style.width = Math.min(100, a.money) + '%';
+}
+
+function draw() {
+  for (var i = 0; i < S.agents.length; i++) {
+    var a = S.agents[i], m = meshes[i];
+    var nx = W(a.x), nz = W(a.y);
+    var dx = nx - m.px, dz = nz - m.py;
+    if (dx * dx + dz * dz > 1e-6) m.g.rotation.y = Math.atan2(dx, dz);
+    m.g.position.set(nx, 0, nz);
+    m.px = nx; m.py = nz;
+  }
+}
+
+addEventListener('resize', function () {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.left = -camD * (innerWidth / innerHeight);
+  camera.right = camD * (innerWidth / innerHeight);
+  camera.updateProjectionMatrix();
+});
+
+function frame() {
+  if (playing) for (var i = 0; i < speed; i++) SIM.tick(S);
+  draw();
+  updateHud();
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
