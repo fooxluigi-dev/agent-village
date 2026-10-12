@@ -62,6 +62,16 @@ SIM.tick(s);
 check(ada.needsDecision, 'failed step must request new decision');
 check(s.log.some(e => e.kind === 'fail'), 'failure must be logged');
 
+// 6b. an LLM plan with no valid steps must NOT leave the agent catatonic
+s = SIM.createState();
+ada = s.agents[0];
+SIM.setPlan(s, ada, [{ nope: 1 }, { action: 42 }, {}], 'bad plan', 'g');
+check(ada.plan.length > 0, 'invalid LLM plan must fall back to local brain');
+check(!ada.needsDecision && ada.status !== 'idle' || ada.status === 'idle',
+  'agent must have an executable plan');
+SIM.tick(s);
+check(s.log.some(e => e.text.includes('no valid steps')), 'fallback must be logged');
+
 // 7. local brain never breaks invariants (72h smoke, all agents)
 s = SIM.createState();
 for (let h = 0; h < 72; h++) {

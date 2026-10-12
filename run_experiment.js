@@ -12,7 +12,8 @@ const mod = { exports: {} };
 new Function('module', m[1])(mod);
 const SIM = mod.exports;
 
-const HOURS = +(process.argv[2] || 72);
+const HOURS = +(process.argv.find(a => /^\d+$/.test(a)) || 72);
+const MINIMAL = process.argv.includes('--minimal'); // stripped prompt: only Luigi's 2 vital rules
 const KEY = fs.readFileSync(process.env.HOME + '/.hermes/.env', 'utf8')
   .split('\n').find(l => l.startsWith('OPENROUTER_API_KEY=')).split('=')[1].trim();
 
@@ -68,6 +69,18 @@ ${mem}`;
 }
 
 function systemPrompt(a) {
+  if (MINIMAL) {
+    return `You are a villager in a survival simulation. You know exactly two things, and nothing else:
+1. To live you need food.
+2. Food must be grown or bought.
+
+ACTIONS (the engine enforces these): ${SIM.ACTIONS.join('; ')}.
+Your vitals change over time; health reaching 0 means death. Your plan runs hour by hour until done, until a step fails, or until your vitals interrupt it.
+
+Respond with ONLY a JSON object, no other text:
+{"thought": "your private reasoning", "goal": "short current goal", "plan": [1 to 5 steps]}
+Multi-hour steps (go, gather_*, rest, wait) take "hours" (max 8). give/take need {"who":"...","what":"food","n":1}. say needs {"who":"...","text":"..."}. go needs {"place":"farm|well|forest|camp"}.`;
+  }
   const P = PERSONAS[a.name];
   return `You are ${a.name}, a villager in a tiny survival village simulation. This is your whole world.
 
@@ -158,7 +171,7 @@ async function main() {
         SIM.setPlan(S, a, plan.plan, plan.thought || '', plan.goal || '');
         SIM.out(S, 'decision', a.name,
           '🧠 ' + (plan.thought || '').slice(0, 180) + ' → plan: ' +
-          (plan.plan.map(st => SIM.desc(st)).join(' → ') || '(empty)'));
+          a.plan.map(st => SIM.desc(st)).join(' → ')); // a.plan = engine-filtered
       } else {
         // fallback: engine's local brain keeps the world moving; logged as such
         SIM.setPlan(S, a, SIM.localBrain(S, a), 'LLM unavailable — reverted to local reflexes', a.goal);
@@ -182,8 +195,8 @@ async function main() {
     process.stdout.write(`[Day ${SIM.dayOf(S.h)} ${SIM.clockOf(S.h)}] alive=${alive} calls=${Object.values(STATS.calls).reduce((x, y) => x + y, 0)}\n`);
   }
 
-  const out = { frames, log: S.log, stats: STATS, hours: HOURS };
-  fs.writeFileSync(path.join(__dirname, 'experiment.json'), JSON.stringify(out));
+  const out = { frames, log: S.log, stats: STATS, hours: HOURS, mode: MINIMAL ? 'minimal' : 'full' };
+  fs.writeFileSync(path.join(__dirname, MINIMAL ? 'experiment-minimal.json' : 'experiment.json'), JSON.stringify(out));
   console.log('\n=== EXPERIMENT DONE ===');
   console.log('hours:', HOURS, '| log entries:', S.log.length);
   console.log('LLM calls:', JSON.stringify(STATS.calls));
@@ -193,7 +206,7 @@ async function main() {
   const ling = (STATS.promptTok['inclusionai/ling-3.0-flash'] || 0) / 1e6 * 0.021 +
     (STATS.completionTok['inclusionai/ling-3.0-flash'] || 0) / 1e6 * 0.063;
   console.log('est. cost ling: $' + ling.toFixed(5), '| nemotron free: $0');
-  console.log('wrote experiment.json');
+  console.log(MINIMAL ? 'wrote experiment-minimal.json (2-rule prompt)' : 'wrote experiment.json');
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

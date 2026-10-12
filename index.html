@@ -225,11 +225,17 @@
   }
 
   function setPlan(s, a, plan, thought, goal) {
-    a.plan = (plan || []).slice(0, 6).filter(function (st) { return st && typeof st.action === 'string'; });
+    var filtered = (plan || []).slice(0, 6).filter(function (st) { return st && typeof st.action === 'string'; });
+    if (!filtered.length) {
+      // rejected LLM plan (no valid steps): never go catatonic — fall back to the local brain
+      out(s, 'fail', a.name, '✖ LLM plan had no valid steps → local brain fallback');
+      filtered = localBrain(s, a);
+    }
+    a.plan = filtered;
     a.pi = 0; a.needsDecision = false; a.lastCallH = s.h;
     if (typeof thought === 'string') a.thought = thought.slice(0, 240);
     if (typeof goal === 'string') a.goal = goal.slice(0, 120);
-    a.status = a.plan.length ? desc(a.plan[0]) : 'idle';
+    a.status = desc(a.plan[0]);
   }
 
   // Deterministic local brain: used by the live page (no LLM) and as runner fallback.
