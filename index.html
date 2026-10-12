@@ -352,12 +352,13 @@ var playing = true, speed = 1;
 var MS_PER_VH = 150000;     // live: 1 real hour = 1 virtual day → 1 virtual hour = 150 s
 var MS_PER_FRAME = 800;     // replay: one virtual-hour frame
 
-fetch('experiment.json?' + Math.random()).then(function (r) {
+var RUN = /minimal/.test(location.search) ? 'experiment-minimal.json' : 'experiment.json';
+fetch(RUN + '?' + Math.random()).then(function (r) {
   if (!r.ok) throw 0;
   return r.json();
 }).then(function (d) {
   mode = 'replay'; frames = d.frames; logAll = d.log;
-  document.getElementById('mode').textContent = 'REPLAY · LLM experiment';
+  document.getElementById('mode').textContent = 'REPLAY · ' + (d.mode === 'minimal' ? '2-rule prompt' : 'LLM experiment');
   document.getElementById('mode').className = 'replay';
   document.getElementById('bPlay').textContent = '▶'; playing = false;
   renderLog(0); renderCards(true);
