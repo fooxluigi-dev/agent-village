@@ -3,160 +3,263 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>Agent Village — Phase 1</title>
+<title>Agent Village — Phase 2</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a;color:#e8e8e8;
     font-family:ui-monospace,Menlo,monospace;-webkit-user-select:none;user-select:none}
-  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:14px;align-items:center;
-    padding:10px 12px;background:linear-gradient(#0a0a0af2,#0a0a0a00);font-size:14px;z-index:5;flex-wrap:wrap}
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:12px;align-items:center;
+    padding:8px 10px;background:linear-gradient(#0a0a0af2,#0a0a0a00);font-size:13px;z-index:6;flex-wrap:wrap}
   .gold{color:#d4a017}
+  #mode{font-size:11px;padding:2px 6px;border:1px solid #333;border-radius:4px;color:#888}
+  #mode.replay{border-color:#d4a017;color:#d4a017}
   button{background:#1a1a1a;color:#e8e8e8;border:1px solid #333;border-radius:6px;
-    padding:4px 10px;font:inherit;cursor:pointer}
+    padding:3px 9px;font:inherit;cursor:pointer}
   button.on{border-color:#d4a017;color:#d4a017}
-  #panel{position:fixed;left:0;right:0;bottom:0;padding:10px 14px 14px;background:#0a0a0af2;
-    border-top:1px solid #222;z-index:5;display:none}
-  #panel.show{display:block}
-  .row{display:flex;justify-content:space-between;font-size:13px;margin:4px 0 2px}
-  .bar{height:8px;background:#222;border-radius:4px;overflow:hidden}
-  .bar i{display:block;height:100%;width:0}
-  h3{margin:0 0 4px;font-size:15px;color:#d4a017}
-  #hint{position:fixed;bottom:6px;right:12px;font-size:11px;color:#666;z-index:4}
+  #cards{position:fixed;top:44px;left:0;right:0;display:flex;gap:8px;padding:6px 10px;
+    overflow-x:auto;z-index:5;font-size:12px}
+  .card{min-width:190px;background:#0a0a0ae6;border:1px solid #262626;border-radius:8px;padding:7px 9px}
+  .card.dead{opacity:.45;border-color:#5a1a1a}
+  .card h4{margin:0 0 3px;font-size:13px}
+  .doing{color:#5ac8fa;min-height:15px}
+  .goal{color:#999;font-size:11px;min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inv{font-size:11px;margin:3px 0}
+  .row{display:flex;justify-content:space-between;font-size:10px;margin:2px 0 1px;color:#aaa}
+  .bar{height:6px;background:#222;border-radius:3px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0;transition:width .3s}
+  #log{position:fixed;left:0;right:0;bottom:0;height:32vh;overflow-y:auto;
+    background:#0a0a0af2;border-top:1px solid #262626;padding:6px 10px;font-size:11px;z-index:5}
+  #log div{margin:2px 0;white-space:pre-wrap}
+  .k-decision{color:#d4a017}.k-event{color:#7ee787}.k-fail{color:#ff6b6b}
+  .k-death{color:#ff4444;font-weight:bold}.k-local{color:#888}.k-h{color:#555;margin-top:6px!important}
+  .t{color:#555}
 </style>
 </head>
 <body>
 <div id="hud">
   <span class="gold">🏛 AGENT VILLAGE</span>
-  <span>🌾 <b id="hFood">0</b></span>
-  <span>💰 <b id="hMoney">0</b></span>
-  <span>📅 day <b id="hDay">1</b></span>
+  <span>🕒 <b id="clock">Day 1 · 00:00</b></span>
+  <span id="mode">loading…</span>
   <button id="bPlay" class="on">⏸</button>
   <button class="spd on" data-s="1">1×</button>
   <button class="spd" data-s="2">2×</button>
   <button class="spd" data-s="4">4×</button>
 </div>
-<div id="panel">
-  <h3 id="pName">—</h3>
-  <div class="row"><span id="pJob"></span><span id="pAct"></span></div>
-  <div class="row"><span>hunger</span><span id="vHx"></span></div>
-  <div class="bar"><i id="bHx" style="background:#ff6b6b"></i></div>
-  <div class="row"><span>energy</span><span id="vEn"></span></div>
-  <div class="bar"><i id="bEn" style="background:#5ac8fa"></i></div>
-  <div class="row"><span>money</span><span id="vMo"></span></div>
-  <div class="bar"><i id="bMo" style="background:#d4a017"></i></div>
-</div>
-<div id="hint">drag = rotate · pinch = zoom · tap a villager</div>
+<div id="cards"></div>
+<div id="log"></div>
 
 <script id="sim">
-/* Pure simulation: no DOM, no THREE. Runs in the browser (window.SIM)
-   and in Node for tests (module.exports). */
+/* Pure engine: virtual clock, 3 villagers, resources, plans, validated actions.
+   No DOM/THREE. Browser: window.SIM. Node: module.exports. */
 (function () {
-  var W = 16;
-  var JOBS = ['farmer', 'farmer', 'builder', 'builder', 'trader', 'idle'];
-  var NAMES = ['Ada', 'Bram', 'Cia', 'Dov', 'Ela', 'Fen'];
-  var HOMES = [[11, 2], [11, 7], [11, 12]];
-  var SPOT = { farm: [3, 3], site: [4, 12], market: [8, 8] };
+  var LOCS = { camp: [8, 8], farm: [3, 3], well: [4, 12], forest: [12, 4] };
+  var NODE_OF = { food: 'farm', water: 'well', wood: 'forest' };
+  var ACTIONS = [
+    'go(place): 1h travel to camp|farm|well|forest',
+    'gather_food|gather_water|gather_wood: 1h at that node, +2 units (needs stock)',
+    'eat: consume 1 food, hunger -50',
+    'drink: consume 1 water, health +15',
+    'rest: 1h energy +20, or +45 if you burn 1 wood (campfire)',
+    'give(who,what,n): transfer n of food|water|wood to a villager at your location',
+    'take(who,what,n): take n from a villager at your location (they WILL notice)',
+    'say(who,text): speak to a villager at your location (enters their memory)',
+    'wait: 1h doing nothing'
+  ];
+  var NAMES = ['Ada', 'Bram', 'Cia'];
 
-  function mulberry32(a) {
-    return function () {
-      a |= 0; a = a + 0x6D2B79F5 | 0;
-      var t = Math.imul(a ^ a >>> 15, 1 | a);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  function createState() {
+    return {
+      h: 0,
+      nodes: { food: { stock: 26, max: 36 }, water: { stock: 26, max: 36 }, wood: { stock: 16, max: 26 } },
+      agents: NAMES.map(function (n, i) {
+        return {
+          id: i, name: n, loc: 'camp', inv: { food: 2, water: 1, wood: 0 },
+          hunger: 30, energy: 90, health: 100, alive: true,
+          goal: '', thought: '', plan: [], pi: 0, status: 'idle',
+          needsDecision: true, lastCallH: -99, memory: []
+        };
+      }),
+      log: []
     };
   }
 
-  function createState(seed) {
-    var rnd = mulberry32(seed || 1);
-    var agents = NAMES.map(function (n, i) {
-      return {
-        id: i, name: n, job: JOBS[i],
-        x: 7 + rnd() * 2, y: 7 + rnd() * 2, tx: 8, ty: 8,
-        hx: 20 + rnd() * 30, en: 60 + rnd() * 30, money: 5,
-        w: { eat: 0.8 + rnd() * 0.6, sleep: 0.8 + rnd() * 0.6, work: 0.7 + rnd() * 0.8 },
-        act: 'wander', phase: 'rechoose', prog: 0
-      };
-    });
-    return { t: 0, food: 10, agents: agents, homes: HOMES, rnd: rnd,
-             stats: { foodMade: 0, foodEaten: 0, moneyMade: 0 } };
+  function out(s, kind, agent, text) {
+    s.log.push({ h: s.h, kind: kind, agent: agent || '', text: text });
+  }
+  function remember(s, a, text) {
+    a.memory.push({ h: s.h, text: text });
+    if (a.memory.length > 40) a.memory.shift();
+  }
+  function dur(st) {
+    var multi = /^(go|gather_|rest$|wait)/.test(st.action) || st.action === 'rest' || st.action === 'wait';
+    return multi ? Math.min(8, Math.max(1, st.hours || 1)) : 1;
+  }
+  function desc(st) {
+    var s = st.action;
+    if (st.action === 'go') s += '→' + st.place;
+    if (/^gather_/.test(st.action)) s += (st.hours > 1 ? '×' + st.hours : '');
+    if (st.action === 'rest' && st.hours > 1) s += '×' + st.hours;
+    if (st.action === 'give' || st.action === 'take') s += '(' + st.who + ': ' + (st.n || 1) + ' ' + st.what + ')';
+    if (st.action === 'say') s += '(' + st.who + ')';
+    return s;
   }
 
-  function setTarget(a, s, act) {
-    a.act = act; a.phase = 'move'; a.prog = 0;
-    var t;
-    if (act === 'eat') t = SPOT.market;
-    else if (act === 'sleep') { var h = s.homes[a.id % 3]; t = [h[0] - 1, h[1]]; }
-    else if (act === 'work') t = a.job === 'farmer' ? SPOT.farm
-                                : a.job === 'builder' ? SPOT.site : SPOT.market;
-    else t = [1 + Math.floor(s.rnd() * 14), 1 + Math.floor(s.rnd() * 14)];
-    a.tx = t[0]; a.ty = t[1];
-  }
-
-  function chooseAction(a, s) {
-    var sc = {
-      eat: a.hx > 20 ? a.hx * 1.2 * a.w.eat + (s.food > 0 ? 25 : a.money >= 2 ? 8 : 0) : 0,
-      sleep: a.en < 95 ? (100 - a.en) * a.w.sleep : 0,
-      work: a.job !== 'idle' && a.en > 32 && a.hx < 70
-              ? 50 * a.w.work + (100 - Math.min(a.money, 80)) : 0,
-      wander: 15
-    };
-    var best = 'wander';
-    for (var k in sc) if (sc[k] > sc[best]) best = k;
-    if (sc[a.act] > 0 && sc[a.act] >= sc[best] - 15) best = a.act; // hysteresis: avoid oscillation (dead actions never stick)
-    setTarget(a, s, best);
-  }
-
-  function doAction(a, s) { // returns true when the action is finished
-    var d;
-    if (a.act === 'eat') {
-      if (a.hx < 10) return true;
-      if (s.food > 0) { s.food--; a.hx = 0; s.stats.foodEaten++; return true; }
-      if (a.money >= 2) { a.money -= 2; a.hx = 0; s.stats.foodEaten++; return true; }
-      return true;
-    }
-    if (a.act === 'sleep') { a.en = Math.min(100, a.en + 6); return a.en >= 98; }
-    if (a.act === 'work') {
-      a.en = Math.max(0, a.en - 1.2);
-      a.hx = Math.min(100, a.hx + 0.4);
-      a.prog++;
-      if (a.prog % 4 === 0) {
-        if (a.job === 'farmer') { s.food++; s.stats.foodMade++; }
-        else if (a.job === 'builder') { a.money += 2; s.stats.moneyMade += 2; }
-        else { // trader: keep the granary stocked, else earn
-          if (s.food < 4 && a.money >= 2) { a.money -= 2; s.food++; }
-          else { a.money += 2; s.stats.moneyMade += 2; }
+  // Engine validation: the ONLY place actions take effect. Returns {ok, text}.
+  function applyAction(s, a, st) {
+    var t, r;
+    switch (st.action) {
+      case 'go':
+        if (!LOCS[st.place]) return { ok: false, text: 'unknown place ' + st.place };
+        a.loc = st.place;
+        return { ok: true, text: 'arrived at ' + st.place };
+      case 'gather_food': case 'gather_water': case 'gather_wood':
+        r = st.action.slice(7);
+        if (a.loc !== NODE_OF[r]) return { ok: false, text: 'not at the ' + NODE_OF[r] };
+        if (s.nodes[r].stock < 1) return { ok: false, text: NODE_OF[r] + ' exhausted' };
+        t = Math.min(2, s.nodes[r].stock);
+        s.nodes[r].stock -= t; a.inv[r] += t;
+        return { ok: true, text: '+' + t + ' ' + r };
+      case 'eat':
+        if (a.inv.food < 1) return { ok: false, text: 'no food' };
+        a.inv.food--; a.hunger = Math.max(0, a.hunger - 50);
+        return { ok: true, text: 'hunger -50' };
+      case 'drink':
+        if (a.inv.water < 1) return { ok: false, text: 'no water' };
+        a.inv.water--; a.health = Math.min(100, a.health + 15);
+        return { ok: true, text: 'health +15' };
+      case 'rest':
+        if (a.inv.wood > 0) { a.inv.wood--; a.energy = Math.min(100, a.energy + 45); return { ok: true, text: 'campfire: energy +45' }; }
+        a.energy = Math.min(100, a.energy + 20);
+        return { ok: true, text: 'energy +20' };
+      case 'wait':
+        return { ok: true, text: 'waits' };
+      case 'give': case 'take': case 'say':
+        t = byName(s, st.who);
+        if (t === a) return { ok: false, text: 'cannot interact with yourself' };
+        if (!t || !t.alive) return { ok: false, text: (st.who || '?') + ' not available' };
+        if (st.action === 'say') {
+          if (t.loc !== a.loc) return { ok: false, text: st.who + ' is elsewhere' };
+          remember(s, t, a.name + ' said: "' + String(st.text || '').slice(0, 120) + '"');
+          t.needsDecision = true;
+          out(s, 'event', a.name, '💬 ' + a.name + '→' + st.who + ': ' + String(st.text || '').slice(0, 80));
+          return { ok: true, text: 'said to ' + st.who };
         }
-      }
-      return a.en < 25 || a.hx > 75;
+        if (t.loc !== a.loc) return { ok: false, text: st.who + ' is elsewhere' };
+        if (!st.what || !(st.n > 0)) return { ok: false, text: 'bad give/take args' };
+        if (st.action === 'give') {
+          if (a.inv[st.what] < st.n) return { ok: false, text: 'you lack ' + st.what };
+          a.inv[st.what] -= st.n; t.inv[st.what] += st.n;
+          remember(s, t, a.name + ' gave you ' + st.n + ' ' + st.what);
+          t.needsDecision = true;
+          out(s, 'event', a.name, '🎁 ' + a.name + ' → ' + st.n + ' ' + st.what + ' → ' + st.who);
+          return { ok: true, text: 'gave ' + st.n + ' ' + st.what + ' to ' + st.who };
+        }
+        if (t.inv[st.what] < st.n) return { ok: false, text: st.who + ' lacks ' + st.what };
+        t.inv[st.what] -= st.n; a.inv[st.what] += st.n;
+        remember(s, t, a.name + ' TOOK ' + st.n + ' ' + st.what + ' from you!');
+        t.needsDecision = true;
+        out(s, 'event', a.name, '⚔ ' + a.name + ' took ' + st.n + ' ' + st.what + ' from ' + st.who);
+        return { ok: true, text: 'took ' + st.n + ' ' + st.what + ' from ' + st.who };
+      default:
+        return { ok: false, text: 'unknown action ' + st.action };
     }
-    d = Math.hypot(a.tx - a.x, a.ty - a.y);
-    return d < 0.2;
   }
 
+  function byName(s, n) {
+    for (var i = 0; i < s.agents.length; i++) if (s.agents[i].name === n) return s.agents[i];
+    return null;
+  }
+
+  // One virtual hour. Vitals + plan execution + death + interrupts.
   function tick(s) {
-    s.t++;
+    s.h++;
+    if (s.h % 6 === 0) {
+      for (var r in s.nodes) {
+        var nd = s.nodes[r];
+        if (nd.stock < nd.max) nd.stock++;
+      }
+    }
     for (var i = 0; i < s.agents.length; i++) {
       var a = s.agents[i];
-      a.hx = Math.min(100, a.hx + 0.8);
-      if (a.en <= 0 && a.act !== 'sleep') { a.en = 1; setTarget(a, s, 'sleep'); continue; }
-      if (a.phase === 'move') {
-        var dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy);
-        if (d < 0.15) { a.phase = 'do'; }
-        else {
-          var st = Math.min(0.7, d);
-          a.x += dx / d * st; a.y += dy / d * st;
-          a.en = Math.max(0, a.en - (a.act === 'work' ? 0.5 : 0.25));
-          continue;
+      if (!a.alive) continue;
+      a.hunger = Math.min(100, a.hunger + 5);
+      a.energy = Math.max(0, a.energy - 4);
+      var cause = '';
+      if (a.hunger >= 100) { a.health -= 6; cause = 'starvation'; }
+      if (a.energy <= 0) { a.health -= 4; cause = cause || 'exhaustion'; }
+
+      if (a.plan.length) {
+        var st = a.plan[a.pi];
+        var res = applyAction(s, a, st);
+        if (!res.ok) {
+          out(s, 'fail', a.name, '✖ plan "' + desc(st) + '" failed: ' + res.text);
+          a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true;
+        } else {
+          st._left = (st._left || dur(st)) - 1;
+          a.status = desc(st) + ' · ' + res.text;
+          if (st._left <= 0) {
+            a.pi++;
+            if (a.pi >= a.plan.length) {
+              a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true;
+            }
+          }
+        }
+        if (a.plan.length && (a.health < 30 || a.hunger > 85)) {
+          out(s, 'fail', a.name, '⚡ interrupted plan (health ' + Math.round(a.health) + '/hunger ' + Math.round(a.hunger) + ')');
+          a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true;
+        }
+      } else {
+        a.status = 'idle';
+      }
+
+      if (a.health <= 0) {
+        a.alive = false; a.health = 0; a.plan = [];
+        out(s, 'death', a.name, '☠ ' + a.name + ' died at Day ' + dayOf(s.h) + ' ' + clockOf(s.h) + ' (' + (cause || 'wounds') + ')');
+        for (var j = 0; j < s.agents.length; j++) {
+          var o = s.agents[j];
+          if (o.alive && o.loc === a.loc) { remember(s, o, a.name + ' DIED here.'); o.needsDecision = true; }
         }
       }
-      if (a.phase === 'do') {
-        if (doAction(a, s)) a.phase = 'rechoose';
-        continue;
-      }
-      chooseAction(a, s);
     }
   }
 
-  var api = { createState: createState, tick: tick, chooseAction: chooseAction, W: W };
+  function setPlan(s, a, plan, thought, goal) {
+    a.plan = (plan || []).slice(0, 6).filter(function (st) { return st && typeof st.action === 'string'; });
+    a.pi = 0; a.needsDecision = false; a.lastCallH = s.h;
+    if (typeof thought === 'string') a.thought = thought.slice(0, 240);
+    if (typeof goal === 'string') a.goal = goal.slice(0, 120);
+    a.status = a.plan.length ? desc(a.plan[0]) : 'idle';
+  }
+
+  // Deterministic local brain: used by the live page (no LLM) and as runner fallback.
+  function localBrain(s, a) {
+    if (a.health < 60 && a.inv.water > 0) return [{ action: 'drink' }];
+    if (a.hunger > 55 && a.inv.food > 0) return [{ action: 'eat' }];
+    if (a.hunger > 50 && a.inv.food === 0)
+      return a.loc === 'farm'
+        ? [{ action: 'gather_food', hours: 2 }, { action: 'go', place: 'camp' }, { action: 'eat' }]
+        : [{ action: 'go', place: 'farm' }, { action: 'gather_food', hours: 2 }, { action: 'go', place: 'camp' }, { action: 'eat' }];
+    if (a.energy < 35)
+      return a.loc === 'camp'
+        ? [{ action: 'rest', hours: 3 }]
+        : [{ action: 'go', place: 'camp' }, { action: 'rest', hours: 3 }];
+    if (a.inv.food < 2)
+      return a.loc === 'farm' ? [{ action: 'gather_food', hours: 2 }] : [{ action: 'go', place: 'farm' }, { action: 'gather_food', hours: 2 }];
+    if (a.inv.wood < 1)
+      return a.loc === 'forest' ? [{ action: 'gather_wood', hours: 2 }] : [{ action: 'go', place: 'forest' }, { action: 'gather_wood', hours: 2 }];
+    return a.loc === 'well' ? [{ action: 'gather_water', hours: 2 }] : [{ action: 'go', place: 'well' }, { action: 'gather_water', hours: 2 }];
+  }
+
+  function dayOf(h) { return Math.floor(h / 24) + 1; }
+  function clockOf(h) {
+    var hh = h % 24;
+    return (hh < 10 ? '0' : '') + hh + ':00';
+  }
+
+  var api = {
+    createState: createState, tick: tick, applyAction: applyAction, setPlan: setPlan,
+    localBrain: localBrain, desc: desc, ACTIONS: ACTIONS, LOCS: LOCS,
+    NAMES: NAMES, dayOf: dayOf, clockOf: clockOf, out: out, remember: remember, byName: byName
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else self.SIM = api;
 })();
@@ -165,20 +268,16 @@
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-var S = SIM.createState(42);
+// ---------- 3D scene ----------
 var scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0a);
 var renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
-// ponytail: no shadow maps (mobile perf); add DirectionalLight shadows if it looks flat
+// ponytail: no shadow maps (mobile perf)
 var camD = 16;
-function mkCam() {
-  var a = innerWidth / innerHeight;
-  return new THREE.OrthographicCamera(-camD * a, camD * a, camD, -camD, 0.1, 300);
-}
-var camera = mkCam();
+var camera = new THREE.OrthographicCamera(-camD * (innerWidth / innerHeight), camD * (innerWidth / innerHeight), camD, -camD, 0.1, 300);
 camera.position.set(18, 20, 18);
 camera.lookAt(0, 0, 0);
 var controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -190,100 +289,74 @@ scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x223322, 0.9));
 var sun = new THREE.DirectionalLight(0xffffff, 0.7);
 sun.position.set(10, 20, 6);
 scene.add(sun);
+function W(gx) { return gx - 8; }
 
-function W(gx) { return gx - 8; } // grid 0..15 -> world -8..7
-
-var ground = new THREE.Mesh(new THREE.PlaneGeometry(16, 16),
-  new THREE.MeshLambertMaterial({ color: 0x2f5e33 }));
+var ground = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshLambertMaterial({ color: 0x2f5e33 }));
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 var grid = new THREE.GridHelper(16, 16, 0x3a7c40, 0x2a5c2f);
 grid.position.y = 0.01;
 scene.add(grid);
 
-// farm plot at grid (3,3)
-var farm = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 5),
-  new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
-farm.position.set(W(3), 0.06, W(3));
-scene.add(farm);
-for (var j = 0; j < 5; j++) {
-  var row = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.18, 0.5),
-    new THREE.MeshLambertMaterial({ color: 0x4caf50 }));
-  row.position.set(W(3), 0.15, W(3) - 2 + j);
-  scene.add(row);
+// farm (food)
+var farm = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.12, 4.5), new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
+farm.position.set(W(3), 0.06, W(3)); scene.add(farm);
+for (var j = 0; j < 4; j++) {
+  var row = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.18, 0.5), new THREE.MeshLambertMaterial({ color: 0x4caf50 }));
+  row.position.set(W(3), 0.15, W(3) - 1.5 + j); scene.add(row);
 }
-
-// houses
-S.homes.forEach(function (h) {
-  var body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 3),
-    new THREE.MeshLambertMaterial({ color: 0x6a625a }));
-  body.position.set(W(h[0]), 0.9, W(h[1]));
-  scene.add(body);
-  var roof = new THREE.Mesh(new THREE.ConeGeometry(2.4, 1.4, 4),
-    new THREE.MeshLambertMaterial({ color: 0x8b3a3a }));
-  roof.position.set(W(h[0]), 2.5, W(h[1]));
-  roof.rotation.y = Math.PI / 4;
-  scene.add(roof);
+// well (water)
+var well = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1, 1, 10), new THREE.MeshLambertMaterial({ color: 0x778899 }));
+well.position.set(W(4), 0.5, W(12)); scene.add(well);
+var wWater = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.2, 10), new THREE.MeshLambertMaterial({ color: 0x3388dd }));
+wWater.position.set(W(4), 1.0, W(12)); scene.add(wWater);
+// forest (wood)
+[[12, 4], [13, 5.5], [11, 5.5], [13, 3], [11.5, 2.5]].forEach(function (p) {
+  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.4, 6), new THREE.MeshLambertMaterial({ color: 0x6b4226 }));
+  trunk.position.set(W(p[0]), 0.7, W(p[1])); scene.add(trunk);
+  var crown = new THREE.Mesh(new THREE.ConeGeometry(1, 2.2, 7), new THREE.MeshLambertMaterial({ color: 0x2d6b33 }));
+  crown.position.set(W(p[0]), 2.3, W(p[1])); scene.add(crown);
 });
-
-// market (granary) at grid (8,8) = world center
-var market = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.4),
-  new THREE.MeshLambertMaterial({ color: 0xd4a017 }));
-market.position.set(W(8), 0.7, W(8));
-scene.add(market);
-var mTop = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 1.4),
-  new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
-mTop.position.set(W(8), 1.8, W(8));
-scene.add(mTop);
-
-// build site at grid (4,12)
-var slab = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.7, 2.5),
-  new THREE.MeshLambertMaterial({ color: 0x555555 }));
-slab.position.set(W(4), 0.35, W(12));
-scene.add(slab);
-[[-1, -1], [1, 1]].forEach(function (o) {
-  var pole = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 0.3),
-    new THREE.MeshLambertMaterial({ color: 0x886633 }));
-  pole.position.set(W(4) + o[0], 1.3, W(12) + o[1]);
-  scene.add(pole);
-});
+// camp
+var fire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 7), new THREE.MeshLambertMaterial({ color: 0xff8822 }));
+fire.position.set(W(8), 0.5, W(8)); scene.add(fire);
+var ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 6, 12), new THREE.MeshLambertMaterial({ color: 0x555555 }));
+ring.rotation.x = Math.PI / 2; ring.position.set(W(8), 0.1, W(8)); scene.add(ring);
 
 // villagers
-var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b, 0x7ee787, 0xffa94d, 0xb197fc];
-var meshes = S.agents.map(function (a, i) {
+var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b];
+var meshes = SIM_NAMES().map(function (n, i) {
   var g = new THREE.Group();
-  var body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5),
-    new THREE.MeshLambertMaterial({ color: COLORS[i] }));
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), new THREE.MeshLambertMaterial({ color: COLORS[i] }));
   body.position.y = 0.4;
-  var head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
-    new THREE.MeshLambertMaterial({ color: 0xf0d0a0 }));
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshLambertMaterial({ color: 0xf0d0a0 }));
   head.position.y = 1.05;
-  body.userData.aid = i; head.userData.aid = i;
-  g.add(body); g.add(head);
-  scene.add(g);
-  return { g: g, px: a.x, py: a.y };
+  g.add(body); g.add(head); scene.add(g);
+  return { g: g, px: 8, pz: 8 };
 });
+function SIM_NAMES() { return ['Ada', 'Bram', 'Cia']; }
 
-// selection
-var selected = null;
-var down = null;
-renderer.domElement.addEventListener('pointerdown', function (e) { down = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointerup', function (e) {
-  if (!down) return;
-  var moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
-  down = null;
-  if (moved > 10) return;
-  var v = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  var rc = new THREE.Raycaster();
-  rc.setFromCamera(v, camera);
-  var hits = rc.intersectObjects(renderer.domElement ? scene.children : [], true)
-    .filter(function (h) { return h.object.userData.aid !== undefined; });
-  selected = hits.length ? hits[0].object.userData.aid : null;
-  document.getElementById('panel').classList.toggle('show', selected !== null);
-});
-
-// HUD wiring
+// ---------- state: replay of the LLM experiment, or live local-brain mode ----------
+var mode = 'live';          // 'replay' | 'live'
+var S = SIM.createState();  // live world
+var frames = [], logAll = [], replayIdx = 0, replayAcc = 0;
 var playing = true, speed = 1;
+var MS_PER_VH = 150000;     // live: 1 real hour = 1 virtual day → 1 virtual hour = 150 s
+var MS_PER_FRAME = 800;     // replay: one virtual-hour frame
+
+fetch('experiment.json?' + Math.random()).then(function (r) {
+  if (!r.ok) throw 0;
+  return r.json();
+}).then(function (d) {
+  mode = 'replay'; frames = d.frames; logAll = d.log;
+  document.getElementById('mode').textContent = 'REPLAY · LLM experiment';
+  document.getElementById('mode').className = 'replay';
+  document.getElementById('bPlay').textContent = '▶'; playing = false;
+  renderLog(0); renderCards(true);
+}).catch(function () {
+  document.getElementById('mode').textContent = 'LOCAL brain (no LLM)';
+});
+
 document.getElementById('bPlay').onclick = function () {
   playing = !playing;
   this.textContent = playing ? '⏸' : '▶';
@@ -297,34 +370,132 @@ Array.prototype.forEach.call(document.querySelectorAll('.spd'), function (b) {
   };
 });
 
-function updateHud() {
-  var money = S.agents.reduce(function (x, a) { return x + a.money; }, 0);
-  document.getElementById('hFood').textContent = S.food;
-  document.getElementById('hMoney').textContent = money;
-  document.getElementById('hDay').textContent = Math.floor(S.t / 60) + 1;
-  if (selected === null) return;
-  var a = S.agents[selected];
-  document.getElementById('pName').textContent = a.name;
-  document.getElementById('pJob').textContent = a.job;
-  document.getElementById('pAct').textContent = '→ ' + a.act + ' (' + a.phase + ')';
-  document.getElementById('vHx').textContent = Math.round(a.hx);
-  document.getElementById('vEn').textContent = Math.round(a.en);
-  document.getElementById('vMo').textContent = a.money;
-  document.getElementById('bHx').style.width = a.hx + '%';
-  document.getElementById('bEn').style.width = a.en + '%';
-  document.getElementById('bMo').style.width = Math.min(100, a.money) + '%';
+// ---------- HUD ----------
+function frameAgents() {
+  if (mode === 'replay') return frames[replayIdx] ? frames[replayIdx].agents : null;
+  return S.agents;
+}
+function frameH() { return mode === 'replay' ? replayIdx : S.h; }
+
+function renderCards(force) {
+  var ags = frameAgents();
+  if (!ags) return;
+  var box = document.getElementById('cards');
+  if (force || box.children.length !== ags.length) {
+    box.innerHTML = '';
+    ags.forEach(function (a, i) {
+      var d = document.createElement('div');
+      d.className = 'card'; d.id = 'card' + i;
+      d.innerHTML = '<h4 style="color:' + ['#d4a017', '#5ac8fa', '#ff6b6b'][i] + '">' + a.name + '</h4>' +
+        '<div class="doing" id="do' + i + '"></div>' +
+        '<div class="goal" id="go' + i + '"></div>' +
+        '<div class="inv" id="iv' + i + '"></div>' +
+        '<div class="row"><span>hunger</span><span id="vh' + i + '"></span></div><div class="bar"><i id="bh' + i + '" style="background:#ff6b6b"></i></div>' +
+        '<div class="row"><span>energy</span><span id="ve' + i + '"></span></div><div class="bar"><i id="be' + i + '" style="background:#5ac8fa"></i></div>' +
+        '<div class="row"><span>health</span><span id="vp' + i + '"></span></div><div class="bar"><i id="bp' + i + '" style="background:#7ee787"></i></div>';
+      box.appendChild(d);
+    });
+  }
+  ags.forEach(function (a, i) {
+    var c = document.getElementById('card' + i);
+    c.classList.toggle('dead', a.alive === false);
+    document.getElementById('do' + i).textContent = a.alive === false ? '☠ dead' : (a.status || 'idle');
+    document.getElementById('go' + i).textContent = a.goal ? '🎯 ' + a.goal : '';
+    var iv = a.inv || {};
+    document.getElementById('iv' + i).textContent =
+      '🍗' + (iv.food || 0) + '  💧' + (iv.water || 0) + '  🪵' + (iv.wood || 0) + '  @' + a.loc;
+    document.getElementById('vh' + i).textContent = Math.round(a.hunger);
+    document.getElementById('ve' + i).textContent = Math.round(a.energy);
+    document.getElementById('vp' + i).textContent = Math.round(a.health);
+    document.getElementById('bh' + i).style.width = a.hunger + '%';
+    document.getElementById('be' + i).style.width = a.energy + '%';
+    document.getElementById('bp' + i).style.width = a.health + '%';
+  });
 }
 
-function draw() {
-  for (var i = 0; i < S.agents.length; i++) {
-    var a = S.agents[i], m = meshes[i];
-    var nx = W(a.x), nz = W(a.y);
-    var dx = nx - m.px, dz = nz - m.py;
-    if (dx * dx + dz * dz > 1e-6) m.g.rotation.y = Math.atan2(dx, dz);
-    m.g.position.set(nx, 0, nz);
-    m.px = nx; m.py = nz;
-  }
+var logRendered = -1;
+function renderLog(force) {
+  var src = mode === 'replay' ? logAll : S.log;
+  var cur = frameH();
+  var visible = src.filter(function (e) { return e.h <= cur; });
+  if (!force && visible.length === logRendered) return;
+  logRendered = visible.length;
+  var box = document.getElementById('log');
+  box.innerHTML = '';
+  var lastDay = -1;
+  visible.slice(-70).forEach(function (e) {
+    var d = Math.floor(e.h / 24);
+    if (d !== lastDay) {
+      lastDay = d;
+      var hd = document.createElement('div');
+      hd.className = 'k-h';
+      hd.textContent = '── Day ' + (d + 1) + ' ──';
+      box.appendChild(hd);
+    }
+    var div = document.createElement('div');
+    div.className = 'k-' + e.kind;
+    div.innerHTML = '<span class="t">' + SIM.clockOf(e.h) + '</span> [' + (e.agent || '·') + '] ' +
+      e.text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    box.appendChild(div);
+  });
+  box.scrollTop = box.scrollHeight;
 }
+
+function updateClock() {
+  document.getElementById('clock').textContent =
+    'Day ' + SIM.dayOf(frameH()) + ' · ' + SIM.clockOf(frameH());
+}
+
+// ---------- animation loop (fixed timestep: virtual time from real elapsed ms) ----------
+var last = performance.now(), acc = 0;
+function loop(now) {
+  var dt = now - last; last = now;
+  if (playing) {
+    if (mode === 'replay') {
+      acc += dt;
+      var step = MS_PER_FRAME / speed;
+      while (acc >= step && replayIdx < frames.length - 1) { acc -= step; replayIdx++; }
+      if (replayIdx >= frames.length - 1) {
+        playing = false;
+        var b = document.getElementById('bPlay');
+        b.textContent = '▶'; b.classList.remove('on');
+      }
+      renderLog(); renderCards();
+    } else {
+      acc += dt;
+      var vh = MS_PER_VH / speed;
+      while (acc >= vh) { acc -= vh; SIM.tick(S); }
+      renderLog(); renderCards();
+    }
+  }
+  updateClock();
+  // smooth position interpolation toward each villager's location
+  var ags = frameAgents();
+  if (ags) {
+    var perLoc = {};
+    for (var q = 0; q < ags.length; q++) { // stack co-located villagers so nobody hides
+      perLoc[ags[q].loc] = (perLoc[ags[q].loc] || 0);
+      ags[q]._stack = perLoc[ags[q].loc]++;
+    }
+    for (var i = 0; i < ags.length; i++) {
+      var L = SIM.LOCS[ags[i].loc] || [8, 8];
+      var st = ags[i]._stack;
+      var tx = W(L[0]) + (st % 2 ? 0.9 : -0.9) * Math.min(st, 2) * 0.5;
+      var tz = W(L[1]) + (st > 1 ? 0.9 : 0);
+      var m = meshes[i];
+      var nx = m.px + (tx - m.px) * Math.min(1, dt / 400);
+      var nz = m.pz + (tz - m.pz) * Math.min(1, dt / 400);
+      m.g.position.set(nx, 0, nz);
+      m.g.visible = ags[i].alive !== false;
+      if (Math.abs(tx - nx) > 0.01 || Math.abs(tz - nz) > 0.01) m.g.rotation.y = Math.atan2(tx - nx, tz - nz);
+      m.px = nx; m.pz = nz;
+    }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 
 addEventListener('resize', function () {
   renderer.setSize(innerWidth, innerHeight);
@@ -332,16 +503,6 @@ addEventListener('resize', function () {
   camera.right = camD * (innerWidth / innerHeight);
   camera.updateProjectionMatrix();
 });
-
-function frame() {
-  if (playing) for (var i = 0; i < speed; i++) SIM.tick(S);
-  draw();
-  updateHud();
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(frame);
-}
-frame();
 </script>
 </body>
 </html>
