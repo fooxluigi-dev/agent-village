@@ -79,7 +79,8 @@ Your vitals change over time; health reaching 0 means death. Your plan runs hour
 
 Respond with ONLY a JSON object, no other text:
 {"thought": "your private reasoning", "goal": "short current goal", "plan": [1 to 5 steps]}
-Multi-hour steps (go, gather_*, rest, wait) take "hours" (max 8). give/take need {"who":"...","what":"food","n":1}. say needs {"who":"...","text":"..."}. go needs {"place":"farm|well|forest|camp"}.`;
+Multi-hour steps (go, gather_*, rest, wait) take "hours" (max 8). give/take need {"who":"...","what":"food","n":1}. say needs {"who":"...","text":"..."}. go needs {"place":"farm|well|forest|camp"}.
+Each plan step MUST look exactly like: {"action":"go","place":"farm"} or {"action":"gather_food","hours":2} — the field name is always "action".`;
   }
   const P = PERSONAS[a.name];
   return `You are ${a.name}, a villager in a tiny survival village simulation. This is your whole world.
