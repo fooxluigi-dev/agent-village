@@ -77,7 +77,7 @@ YOUR GOAL: ${P.goal}
 WORLD RULES (the engine enforces these, nothing else is scripted):
 - The clock advances 1 virtual hour per step. Hunger rises ~5/h; at 100 you starve (health drains, 0 = death). Energy falls 4/h; at 0 you cannot recover without resting. Health below 30 also interrupts whatever you are doing.
 - Food node: gather_food (+2/h). Water: drink heals (+15). Wood: burns in rest for fast energy (+45 vs +20).
-- ACTIONS AVAILABLE (only these): ${SIM.ACTIONS.join('; ')}
+- You can gather_food only AT the farm, gather_water only AT the well, gather_wood only AT the forest — always put a go() step first.\n- ACTIONS AVAILABLE (only these): ${SIM.ACTIONS.join('; ')}
 - You may cooperate, trade, share, ignore, manipulate, steal, lie by omission, or work alone: all ALLOWED, none forced. Outcomes are consequences, not judgments.
 - Being at the same location as someone is required for give/take/say.
 - Your plan runs hour by hour until done, until a step fails, or until your vitals interrupt it. Then you are asked again.
@@ -171,6 +171,7 @@ async function main() {
     // FEEDBACK is implicit: failures land in log+memory, victims get needsDecision
     frames.push({
       h: S.h,
+      nodes: { food: S.nodes.food.stock, water: S.nodes.water.stock, wood: S.nodes.wood.stock },
       agents: S.agents.map(a => ({
         name: a.name, loc: a.loc, inv: Object.assign({}, a.inv),
         hunger: Math.round(a.hunger), energy: Math.round(a.energy), health: Math.round(a.health),

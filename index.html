@@ -115,12 +115,12 @@
         r = st.action.slice(7);
         if (a.loc !== NODE_OF[r]) return { ok: false, text: 'not at the ' + NODE_OF[r] };
         if (s.nodes[r].stock < 1) return { ok: false, text: NODE_OF[r] + ' exhausted' };
-        t = Math.min(2, s.nodes[r].stock);
+        t = Math.min(3, s.nodes[r].stock);
         s.nodes[r].stock -= t; a.inv[r] += t;
         return { ok: true, text: '+' + t + ' ' + r };
       case 'eat':
         if (a.inv.food < 1) return { ok: false, text: 'no food' };
-        a.inv.food--; a.hunger = Math.max(0, a.hunger - 50);
+        a.inv.food--; a.hunger = Math.max(0, a.hunger - 70);
         return { ok: true, text: 'hunger -50' };
       case 'drink':
         if (a.inv.water < 1) return { ok: false, text: 'no water' };
@@ -172,7 +172,7 @@
   // One virtual hour. Vitals + plan execution + death + interrupts.
   function tick(s) {
     s.h++;
-    if (s.h % 6 === 0) {
+    if (s.h % 4 === 0) {
       for (var r in s.nodes) {
         var nd = s.nodes[r];
         if (nd.stock < nd.max) nd.stock++;
@@ -191,8 +191,10 @@
         var st = a.plan[a.pi];
         var res = applyAction(s, a, st);
         if (!res.ok) {
-          out(s, 'fail', a.name, '✖ plan "' + desc(st) + '" failed: ' + res.text);
-          a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true;
+          out(s, 'fail', a.name, '✖ "' + desc(st) + '" failed: ' + res.text + ' — step skipped');
+          a.pi++;
+          a.status = 'skipped ✖';
+          if (a.pi >= a.plan.length) { a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true; }
         } else {
           st._left = (st._left || dur(st)) - 1;
           a.status = desc(st) + ' · ' + res.text;

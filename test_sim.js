@@ -15,7 +15,7 @@ let ada = s.agents[0];
 check(!SIM.applyAction(s, ada, { action: 'gather_food' }).ok, 'gather away from farm must fail');
 SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
 check(SIM.applyAction(s, ada, { action: 'gather_food' }).ok, 'gather at farm must work');
-check(ada.inv.food === 4, 'food should be 2+2, got ' + ada.inv.food);
+check(ada.inv.food === 5, 'food should be 2+3, got ' + ada.inv.food);
 
 // 2. give/take require co-location, move inventory, notify victim
 let bram = s.agents[1];
@@ -24,14 +24,14 @@ SIM.applyAction(s, bram, { action: 'go', place: 'farm' });
 bram.inv.food = 1;
 let r = SIM.applyAction(s, ada, { action: 'take', who: 'Bram', what: 'food', n: 1 });
 check(r.ok, 'co-located take must work: ' + r.text);
-check(bram.inv.food === 0 && ada.inv.food === 5, 'inventory transfer failed');
+check(bram.inv.food === 0 && ada.inv.food === 6, 'inventory transfer failed');
 check(bram.needsDecision, 'victim must be notified');
 check(bram.memory.some(e => e.text.includes('TOOK')), 'victim memory missing theft');
 
 // 3. eat/drink bounds
 ada.hunger = 90; ada.inv.food = 1;
 SIM.applyAction(s, ada, { action: 'eat' });
-check(ada.hunger === 40, 'eat -50 expected, got ' + ada.hunger);
+check(ada.hunger === 20, 'eat -70 expected, got ' + ada.hunger);
 ada.health = 50; ada.inv.water = 1;
 SIM.applyAction(s, ada, { action: 'drink' });
 check(ada.health === 65, 'drink +15 expected');
@@ -52,7 +52,7 @@ SIM.setPlan(s, ada, [{ action: 'go', place: 'farm' }, { action: 'gather_food', h
 check(!ada.needsDecision && ada.plan.length === 2, 'plan must be active');
 for (let i = 0; i < 4; i++) SIM.tick(s);
 check(ada.plan.length === 0 && ada.needsDecision, 'plan must finish and re-request decision');
-check(ada.inv.food >= 4, 'plan should have gathered food');
+check(ada.inv.food >= 5, 'plan should have gathered food');
 
 // 6. failed plan step triggers re-decision
 s = SIM.createState();
