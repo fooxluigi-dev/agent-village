@@ -195,5 +195,4 @@ async function main() {
   console.log('wrote experiment.json');
 }
 
-const S_REF = S; // hoisted for observe()
 main().catch(e => { console.error(e); process.exit(1); });
