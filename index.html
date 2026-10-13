@@ -75,6 +75,7 @@
   <button class="spd on" data-s="1">1×</button>
   <button class="spd" data-s="2">2×</button>
   <button class="spd" data-s="4">4×</button>
+  <button id="bNew" style="display:none">＋ NEW SIM</button>
 </div>
 <div id="cards"></div>
 <div id="log"></div>
@@ -648,6 +649,7 @@ fetch(RUN + '?' + Math.random()).then(function (r) {
   if (!r.ok) throw 0;
   return r.json();
 }).then(function (d) {
+  if (streaming) return;  // una NEW SIM è già partita: non sovrascrivere lo stream
   mode = 'replay'; frames = d.frames; logAll = d.log;
   document.getElementById('mode').textContent = 'REPLAY · ' + (d.mode === 'minimal' ? '2-rule prompt' : 'LLM experiment');
   document.getElementById('mode').className = 'replay';
@@ -673,6 +675,47 @@ Array.prototype.forEach.call(document.querySelectorAll('.spd'), function (b) {
     b.classList.add('on');
   };
 });
+
+// ---------- NEW SIM: visibile solo col server locale (server.js); su GitHub Pages resta nascosto ----------
+var streaming = false;
+function streamPoll() {
+  fetch('experiment-live.json?' + Math.random())
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) { setTimeout(streamPoll, 2000); return; }
+      frames = d.frames; logAll = d.log;
+      renderLog(true); renderCards(true);
+      if (d.done) {
+        streaming = false;
+        document.getElementById('mode').textContent = 'REPLAY · new sim';
+      } else setTimeout(streamPoll, 2000);
+    })
+    .catch(function () { setTimeout(streamPoll, 3000); });
+}
+function startStream() {
+  streaming = true; mode = 'replay';
+  frames = []; logAll = []; replayIdx = 0; logRendered = -1; playing = true; acc = 0;
+  document.getElementById('mode').textContent = 'NEW SIM · live…';
+  document.getElementById('mode').className = 'replay';
+  document.getElementById('bPlay').textContent = '⏸';
+  document.getElementById('bPlay').classList.add('on');
+  renderLog(true); renderCards(true);
+  streamPoll();
+}
+fetch('/api/status').then(function (r) { return r.ok ? r.json() : null; }).then(function (st) {
+  if (!st) return;  // GitHub Pages: nessun server → tasto nascosto
+  var b = document.getElementById('bNew');
+  b.style.display = '';
+  if (st.running) startStream();
+  b.onclick = function () {
+    b.disabled = true;
+    fetch('/api/new', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ minimal: /minimal/.test(location.search), hours: 72 }) })
+      .then(function (r) { return r.json(); })
+      .then(function () { b.disabled = false; startStream(); })
+      .catch(function () { b.disabled = false; });
+  };
+}).catch(function () {});  // Pages: /api/status 404 → il tasto resta nascosto
 
 // ---------- HUD ----------
 function frameAgents() {
@@ -760,9 +803,12 @@ function loop(now) {
       var step = MS_PER_FRAME / speed;
       while (acc >= step && replayIdx < frames.length - 1) { acc -= step; replayIdx++; }
       if (replayIdx >= frames.length - 1) {
-        playing = false;
-        var b = document.getElementById('bPlay');
-        b.textContent = '▶'; b.classList.remove('on');
+        if (streaming) { acc = 0; }  // live: aspetta il prossimo frame, resta in play
+        else {
+          playing = false;
+          var b = document.getElementById('bPlay');
+          b.textContent = '▶'; b.classList.remove('on');
+        }
       }
       renderLog(); renderCards();
     } else {

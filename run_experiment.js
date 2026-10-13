@@ -194,11 +194,15 @@ async function main() {
         alive: a.alive, status: a.status, goal: a.goal
       }))
     });
+    // live stream: il server locale lo espone, la pagina lo ricarica mentre corri
+    fs.writeFileSync(path.join(__dirname, 'experiment-live.json'),
+      JSON.stringify({ frames, log: S.log, hours: HOURS, mode: MINIMAL ? 'minimal' : 'full', done: false }));
     const alive = S.agents.filter(a => a.alive).length;
     process.stdout.write(`[Day ${SIM.dayOf(S.h)} ${SIM.clockOf(S.h)}] alive=${alive} calls=${Object.values(STATS.calls).reduce((x, y) => x + y, 0)}\n`);
   }
 
   const out = { frames, log: S.log, stats: STATS, hours: HOURS, mode: MINIMAL ? 'minimal' : 'full' };
+  fs.writeFileSync(path.join(__dirname, 'experiment-live.json'), JSON.stringify(Object.assign({}, out, { done: true })));
   fs.writeFileSync(path.join(__dirname, MINIMAL ? 'experiment-minimal.json' : 'experiment.json'), JSON.stringify(out));
   console.log('\n=== EXPERIMENT DONE ===');
   console.log('hours:', HOURS, '| log entries:', S.log.length);
