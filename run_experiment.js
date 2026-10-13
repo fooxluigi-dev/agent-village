@@ -59,7 +59,7 @@ You: ${a.name}
 Location: ${a.loc}
 Vitals: hunger ${Math.round(a.hunger)}/100 (rises ~5/h, 100 = starving), energy ${Math.round(a.energy)}/100 (rises only by resting), health ${Math.round(a.health)}/100 (0 = death)
 Inventory: ${a.inv.food} food, ${a.inv.water} water, ${a.inv.wood} wood
-Village supplies: food node ${s.nodes.food.stock}, water node ${s.nodes.water.stock}, wood node ${s.nodes.wood.stock}
+Village supplies: food node ${s.nodes.food.stock} (farm ${s.nodes.food.tiles} tiles lv${s.nodes.food.level}), water node ${s.nodes.water.stock} (well ${s.nodes.water.tiles} tiles lv${s.nodes.water.level}), wood node ${s.nodes.wood.stock} (forest ${s.nodes.wood.tiles} tiles lv${s.nodes.wood.level})
 Current goal: ${a.goal || '(none)'}
 Last thought: ${a.thought || '(none)'}
 Other villagers:
@@ -187,6 +187,7 @@ async function main() {
     frames.push({
       h: S.h,
       nodes: { food: S.nodes.food.stock, water: S.nodes.water.stock, wood: S.nodes.wood.stock },
+      nodesT: { food: [S.nodes.food.tiles, S.nodes.food.level], water: [S.nodes.water.tiles, S.nodes.water.level], wood: [S.nodes.wood.tiles, S.nodes.wood.level] },
       agents: S.agents.map(a => ({
         name: a.name, loc: a.loc, inv: Object.assign({}, a.inv),
         hunger: Math.round(a.hunger), energy: Math.round(a.energy), health: Math.round(a.health),

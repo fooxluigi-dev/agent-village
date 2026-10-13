@@ -36,6 +36,37 @@ ada.health = 50; ada.inv.water = 1;
 SIM.applyAction(s, ada, { action: 'drink' });
 check(ada.health === 65, 'drink +15 expected');
 
+// 3b. till/create: cost from NODE stock, till lv+1 (6h), create tiles+1 (24h), paid on final hour
+s = SIM.createState();
+ada = s.agents[0];
+check(!SIM.applyAction(s, ada, { action: 'till' }).ok, 'till at camp must fail (no node)');
+SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
+s.nodes.wood.stock = 3;
+check(!SIM.applyAction(s, ada, { action: 'till' }).ok, 'till must fail fast when node stock is low');
+s.nodes.wood.stock = 20; s.nodes.wood.max = 20; s.nodes.water.stock = 20; s.nodes.water.max = 20;  // max=stock blocks regen noise
+SIM.setPlan(s, ada, [{ action: 'till' }], 't', 'g');
+for (let i = 0; i < 6; i++) SIM.tick(s);
+check(s.nodes.food.level === 2, 'till must apply once after 6h, level ' + s.nodes.food.level);
+check(s.nodes.wood.stock === 14 && s.nodes.water.stock === 14, 'till must pay 6+6 ONCE, wood ' + s.nodes.wood.stock + ' water ' + s.nodes.water.stock);
+s.nodes.wood.stock = 50; s.nodes.water.stock = 50;
+ada.hunger = 0; ada.health = 100;  // the agent must eat BEFORE a 24h job — hunger won't abort it but will hurt
+SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
+for (let i = 0; i < 24; i++) SIM.tick(s);
+check(s.nodes.food.tiles === 2, 'create adds a tile after 24h even with hunger');
+check(ada.health < 100 && ada.hunger === 100, '24h job on full hunger must cost real health, got ' + ada.health);
+check(s.nodes.wood.stock === 8 && s.nodes.water.stock === 8, 'create must pay 42+42 ONCE, wood ' + s.nodes.wood.stock);
+// interrupted create: no tile, no payment
+s.nodes.wood.stock = 50; s.nodes.water.stock = 50;
+ada.health = 25;  // low health interrupts EVERYTHING, work included
+SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
+for (let i = 0; i < 3; i++) SIM.tick(s);
+check(s.nodes.food.tiles === 2 && s.nodes.wood.stock === 50, 'interrupted create must pay nothing');
+
+// regen: 2 tiles lv2 = +4/4h
+s.nodes.food.stock = 10; s.h = 3;
+for (let i = 0; i < 4; i++) SIM.tick(s);
+check(s.nodes.food.stock === 14, '2 tiles lv2 must regen +4, got ' + (s.nodes.food.stock - 10));
+
 // 4. tick: vitals advance, clock 1h, starvation death, death notifies nearby
 s = SIM.createState();
 for (let i = 0; i < 40; i++) SIM.tick(s);

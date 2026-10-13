@@ -62,14 +62,16 @@
     'give(who,what,n): transfer n of food|water|wood to a villager at your location',
     'take(who,what,n): take n from a villager at your location (they WILL notice)',
     'say(who,text): speak to a villager at your location (enters their memory)',
-    'wait: 1h doing nothing'
+    'wait: 1h doing nothing',
+    'till: 6h at farm|well|forest — upgrades that node (production +1 per 4h). Costs one day of the OTHER two resources',
+    'create: 24h at farm|well|forest — adds a new tile there (more production forever). Costs one WEEK of the OTHER two resources'
   ];
   var NAMES = ['Ada', 'Bram', 'Cia'];
 
   function createState() {
     return {
       h: 0,
-      nodes: { food: { stock: 26, max: 36 }, water: { stock: 26, max: 36 }, wood: { stock: 16, max: 26 } },
+      nodes: { food: { stock: 26, max: 36, tiles: 1, level: 1 }, water: { stock: 26, max: 36, tiles: 1, level: 1 }, wood: { stock: 16, max: 26, tiles: 1, level: 1 } },
       agents: NAMES.map(function (n, i) {
         return {
           id: i, name: n, loc: 'camp', inv: { food: 2, water: 1, wood: 0 },
@@ -90,6 +92,8 @@
     if (a.memory.length > 40) a.memory.shift();
   }
   function dur(st) {
+    if (st.action === 'till') return 6;
+    if (st.action === 'create') return 24;
     var multi = /^(go|gather_|rest$|wait)/.test(st.action) || st.action === 'rest' || st.action === 'wait';
     return multi ? Math.min(8, Math.max(1, st.hours || 1)) : 1;
   }
@@ -118,6 +122,25 @@
         t = Math.min(3, s.nodes[r].stock);
         s.nodes[r].stock -= t; a.inv[r] += t;
         return { ok: true, text: '+' + t + ' ' + r };
+      case 'till': case 'create': {
+        // ponytail: baseline costs (day=6, week=42 of the other two resources from node stock).
+        // upgrade path: scale cost with current production if baseline inflates.
+        var res = { farm: 'food', well: 'water', forest: 'wood' }[a.loc];
+        if (!res) return { ok: false, text: 'nothing to work here' };
+        var others = ['food', 'water', 'wood'].filter(function (x) { return x !== res; });
+        var mult = st.action === 'create' ? 42 : 6;
+        for (var oi = 0; oi < others.length; oi++) {
+          if (s.nodes[others[oi]].stock < mult)
+            return { ok: false, text: 'needs ' + mult + ' ' + others[oi] + ' in the node to sacrifice' };
+        }
+        // validate every hour (fail fast if stock drops mid-work), pay+apply ONLY on the final hour
+        if (st._left !== 1) return { ok: true, text: 'working the ' + a.loc };
+        for (oi = 0; oi < others.length; oi++) s.nodes[others[oi]].stock -= mult;
+        var nd = s.nodes[res];
+        if (st.action === 'till') nd.level++; else nd.tiles++;
+        nd.max = 24 + nd.tiles * nd.level * 12;
+        return { ok: true, text: a.loc + ' now ' + nd.tiles + ' tiles lv' + nd.level };
+      }
       case 'eat':
         if (a.inv.food < 1) return { ok: false, text: 'no food' };
         a.inv.food--; a.hunger = Math.max(0, a.hunger - 70);
@@ -175,7 +198,7 @@
     if (s.h % 4 === 0) {
       for (var r in s.nodes) {
         var nd = s.nodes[r];
-        if (nd.stock < nd.max) nd.stock++;
+        if (nd.stock < nd.max) nd.stock = Math.min(nd.max, nd.stock + nd.tiles * nd.level);  // 1 tile·level = +1/4h
       }
     }
     for (var i = 0; i < s.agents.length; i++) {
@@ -205,7 +228,9 @@
             }
           }
         }
-        if (a.plan.length && (a.health < 30 || a.hunger > 85)) {
+        // till/create are long projects: hunger alone doesn't abort them (they'd be impossible) —
+        // but hunger past 100 drains health for real. eat BEFORE starting a big job.
+        if (a.plan.length && (a.health < 30 || (a.hunger > 85 && st.action !== 'till' && st.action !== 'create'))) {
           out(s, 'fail', a.name, '⚡ interrupted plan (health ' + Math.round(a.health) + '/hunger ' + Math.round(a.hunger) + ')');
           a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true;
         }
@@ -325,6 +350,38 @@ wWater.position.set(W(4), 1.0, W(12)); scene.add(wWater);
   var crown = new THREE.Mesh(new THREE.ConeGeometry(1, 2.2, 7), new THREE.MeshLambertMaterial({ color: 0x2d6b33 }));
   crown.position.set(W(p[0]), 2.3, W(p[1])); scene.add(crown);
 });
+// resource tiles: 1 mesh per tile, count = tiles, color brightness = level
+var TILE_POS = [[0, 1.8], [1.8, 0], [0, -1.8], [-1.8, 0], [1.8, 1.8], [-1.8, 1.8], [1.8, -1.8], [-1.8, -1.8]];
+var TILE_COL = { food: 0x5ecf4a, water: 0x3f9fe0, wood: 0x2d6b33 };
+var TILE_LOC = { food: 'farm', water: 'well', wood: 'forest' };
+var nodeTiles = { food: [], water: [], wood: [] };
+function frameNodesT() {
+  if (mode === 'replay' && frames[replayIdx] && frames[replayIdx].nodesT) return frames[replayIdx].nodesT;
+  var nt = {};
+  for (var r in S.nodes) nt[r] = [S.nodes[r].tiles || 1, S.nodes[r].level || 1];
+  return nt;
+}
+function syncTiles() {
+  var nt = frameNodesT();
+  for (var r in nt) {
+    var t = nt[r][0], lv = nt[r][1], arr = nodeTiles[r], c = new THREE.Color(TILE_COL[r]);
+    var b = Math.min(1.5, 0.75 + (lv - 1) * 0.18);
+    while (arr.length > t) scene.remove(arr.pop().mesh);
+    while (arr.length < t) {
+      var i = arr.length, off = TILE_POS[i] || [0, 2.8 + i * 0.6];
+      var m = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3),
+        new THREE.MeshLambertMaterial({ color: c.clone().multiplyScalar(b) }));
+      var L0 = LOCS[TILE_LOC[r]];
+      m.position.set(W(L0[0] + off[0]), 0.07, W(L0[1] + off[1]));
+      scene.add(m);
+      arr.push({ mesh: m, lv: lv });
+    }
+    for (var k = 0; k < arr.length; k++) {
+      var nb = Math.min(1.5, 0.75 + (lv - 1) * 0.18);
+      if (arr[k].lv !== lv) { arr[k].mesh.material.color.set(TILE_COL[r]).multiplyScalar(nb); arr[k].lv = lv; }
+    }
+  }
+}
 // camp
 var fire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 7), new THREE.MeshLambertMaterial({ color: 0xff8822 }));
 fire.position.set(W(8), 0.5, W(8)); scene.add(fire);
@@ -500,6 +557,7 @@ function loop(now) {
       m.px = nx; m.pz = nz;
     }
   }
+  syncTiles();
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
