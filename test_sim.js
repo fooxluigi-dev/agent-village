@@ -72,11 +72,13 @@ SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
 for (let i = 0; i < 3; i++) SIM.tick(s);
 check(s.nodes.food.tiles === 2 && s.nodes.wood.stock === 50, 'interrupted create must pay nothing');
 
-// regen: 2 tiles lv2 = +4/4h (self-contained)
+// regen: food regen doubles (4 mouths eat ~24/day); wood/water keep tiles·level
 s = SIM.createState();
 s.nodes.food.tiles = 2; s.nodes.food.level = 2; s.nodes.food.stock = 10; s.h = 3;
+s.nodes.wood.tiles = 2; s.nodes.wood.level = 2; s.nodes.wood.stock = 10;
 for (let i = 0; i < 4; i++) SIM.tick(s);
-check(s.nodes.food.stock === 14, '2 tiles lv2 must regen +4, got ' + (s.nodes.food.stock - 10));
+check(s.nodes.food.stock === 18, 'food 2 tiles lv2 must regen +8, got ' + (s.nodes.food.stock - 10));
+check(s.nodes.wood.stock === 14, 'wood 2 tiles lv2 must regen +4, got ' + (s.nodes.wood.stock - 10));
 
 // 4. tick: vitals advance, clock 1h, starvation death, death notifies nearby
 s = SIM.createState();

@@ -105,7 +105,7 @@
   function createState() {
     return {
       h: 0,
-      nodes: { food: { stock: 26, max: 36, tiles: 1, level: 1 }, water: { stock: 26, max: 36, tiles: 1, level: 1 }, wood: { stock: 16, max: 26, tiles: 1, level: 1 } },
+      nodes: { food: { stock: 40, max: 60, tiles: 1, level: 1 }, water: { stock: 26, max: 36, tiles: 1, level: 1 }, wood: { stock: 16, max: 26, tiles: 1, level: 1 } },
       agents: NAMES.map(function (n, i) {
         return {
           id: i, name: n, loc: 'camp', inv: { food: 2, water: 1, wood: 0 },
@@ -232,7 +232,8 @@
     if (s.h % 4 === 0) {
       for (var r in s.nodes) {
         var nd = s.nodes[r];
-        if (nd.stock < nd.max) nd.stock = Math.min(nd.max, nd.stock + nd.tiles * nd.level);  // 1 tile·level = +1/4h
+        var regen = nd.tiles * nd.level * (r === 'food' ? 2 : 1);  // cibo rigenera doppio: 4 bocche mangiano 24/giorno
+        if (nd.stock < nd.max) nd.stock = Math.min(nd.max, nd.stock + regen);
       }
     }
     for (var i = 0; i < s.agents.length; i++) {
