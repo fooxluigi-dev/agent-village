@@ -552,6 +552,9 @@ Promise.all([
     MODELS[name] = s;
   }
   NATURE.forEach(function (n, i) { put(n, r[0][i]); });
+  if (MODELS['lantern']) MODELS['lantern'].traverse(function (c) {
+    if (c.isMesh && c.material && c.material.color) { c.material = c.material.clone(); c.material.color.setHex(0xffe9b0); }
+  });
   TOWN.forEach(function (n, i) { put(n, r[1][i]); });
   buildVillage();
   buildVillagers(r[2]);
@@ -568,7 +571,7 @@ function dayNight() {
   var day = Math.sin(ang);
   sun.position.set(Math.cos(ang) * 16, 2 + day * 18, 7);
   sun.intensity = 0.07 + day * 1.25;
-  hemi.intensity = 0.16 + day * 0.42;
+  hemi.intensity = 0.24 + day * 0.34;
   sun.color.setHSL(0.09 + 0.03 * day, 0.6 - 0.5 * day, 0.55 + 0.4 * day);
   tmpC.copy(SKY_NIGHT).lerp(SKY_DAY, day);
   if (day > 0 && day < 0.4) tmpC.lerp(SKY_DUSK, (0.4 - day) * 1.4);
@@ -605,7 +608,7 @@ function makeTileMesh(r, lv) {
   function add(name, x, y, z, s) {
     if (!MODELS[name]) return;
     var o = MODELS[name].clone(true);
-    o.position.set(x, y, z);
+    o.position.set(x, o.position.y + y, z);   // offset di put() intatto (mai sottoterra)
     if (s) o.scale.setScalar(s);
     grp.add(o);
   }
@@ -613,18 +616,18 @@ function makeTileMesh(r, lv) {
     // colture SEMPRE visibili: lv1 grano, lv2 grano fitto, lv3+ mais, lv4+ zucca
     if (MODELS['crops_wheatStageB']) {
       var w = MODELS['crops_wheatStageB'].clone(true);
-      w.position.set(-0.2, 0.05, -0.15);
+      w.position.set(-0.2, w.position.y + 0.05, -0.15);
       w.scale.setScalar(lv >= 2 ? 1.35 : 1);
       grp.add(w);
-      if (lv >= 2) { var w2 = MODELS['crops_wheatStageB'].clone(true); w2.position.set(0.24, 0.05, 0.2); w2.scale.setScalar(1.15); grp.add(w2); }
+      if (lv >= 2) { var w2 = MODELS['crops_wheatStageB'].clone(true); w2.position.set(0.24, w2.position.y + 0.05, 0.2); w2.scale.setScalar(1.15); grp.add(w2); }
     }
     if (lv >= 3) add('crops_cornStageC', 0.28, 0.05, -0.25, 1);
     if (lv >= 4) add('crop_pumpkin', -0.3, 0.05, 0.3, 0.9);
   } else if (r === 'water') {
-    // pozza d'acqua con bordo di canne
-    var pool = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.09, 0.72),
-      new THREE.MeshPhongMaterial({ color: 0x2f8fd8, shininess: 90, specular: 0x88bbff }));
-    pool.position.y = 0.045;
+    // pozza INSET nella zolla: terra visibile attorno, acqua sotto la superficie del terreno (niente z-fight)
+    var pool = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.04, 0.56),
+      new THREE.MeshPhongMaterial({ color: 0x2f8fd8, shininess: 40, specular: 0x557799 }));
+    pool.position.y = 0.025;   // span 0.005..0.045: dentro la zolla (top 0.05), mai a contatto col suolo
     grp.add(pool);
     add('grass_large', -0.42, 0.01, 0.38, 0.9);
     add('flower_purpleA', 0.42, 0.01, -0.4, 1);
@@ -645,7 +648,7 @@ function syncTiles() {
       var i = arr.length, off = TILE_POS[i] || [0, 2.8 + i * 0.6];
       var L0 = SIM.LOCS[TILE_LOC[r]];
       var m = makeTileMesh(r, lv);
-      m.position.set(W(L0[0] + off[0]), r === 'food' ? 0.06 : 0.07, W(L0[1] + off[1]));
+      m.position.set(W(L0[0] + off[0]), 0, W(L0[1] + off[1]));  // zolle a terra, non galleggianti
       scene.add(m);
       arr.push(m);
     }
