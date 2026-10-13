@@ -72,13 +72,15 @@ SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
 for (let i = 0; i < 3; i++) SIM.tick(s);
 check(s.nodes.food.tiles === 2 && s.nodes.wood.stock === 50, 'interrupted create must pay nothing');
 
-// regen: food regen doubles (4 mouths eat ~24/day); wood/water keep tiles·level
+// regen: food+wood double (4 mouths eat ~24/day, burn ~60 wood/week); water keeps tiles·level
 s = SIM.createState();
 s.nodes.food.tiles = 2; s.nodes.food.level = 2; s.nodes.food.stock = 10; s.h = 3;
 s.nodes.wood.tiles = 2; s.nodes.wood.level = 2; s.nodes.wood.stock = 10;
+s.nodes.water.tiles = 2; s.nodes.water.level = 2; s.nodes.water.stock = 10;
 for (let i = 0; i < 4; i++) SIM.tick(s);
 check(s.nodes.food.stock === 18, 'food 2 tiles lv2 must regen +8, got ' + (s.nodes.food.stock - 10));
-check(s.nodes.wood.stock === 14, 'wood 2 tiles lv2 must regen +4, got ' + (s.nodes.wood.stock - 10));
+check(s.nodes.wood.stock === 18, 'wood 2 tiles lv2 must regen +8, got ' + (s.nodes.wood.stock - 10));
+check(s.nodes.water.stock === 14, 'water 2 tiles lv2 must regen +4, got ' + (s.nodes.water.stock - 10));
 
 // 4. tick: vitals advance, clock 1h, starvation death, death notifies nearby
 s = SIM.createState();
@@ -105,6 +107,18 @@ SIM.setPlan(s, ada, [{ action: 'gather_food' }], '', '');
 SIM.tick(s);
 check(ada.needsDecision, 'failed step must request new decision');
 check(s.log.some(e => e.kind === 'fail'), 'failure must be logged');
+check(ada.pastFails && ada.pastFails.length === 1 && ada.pastFails[0].includes('gather_food'),
+  'failed step must be remembered in pastFails, got ' + JSON.stringify(ada.pastFails));
+// same failure twice must dedupe, and must NOT enter the social memory
+s = SIM.createState(); ada = s.agents[0];
+SIM.setPlan(s, ada, [{ action: 'gather_food' }, { action: 'gather_food' }], '', '');
+SIM.tick(s); SIM.tick(s);
+check(ada.pastFails.length === 1, 'pastFails must dedupe, got ' + JSON.stringify(ada.pastFails));
+check(ada.memory.every(e => !e.text.includes('failed')), 'fails must stay out of social memory');
+// runner-side observation: full-run memory (30 slots) + past-failures line
+const runner = fs.readFileSync(__dirname + '/run_experiment.js', 'utf8');
+check(runner.includes('.slice(-30)'), 'observe must show 30 memory entries');
+check(runner.includes('Past failures'), 'observe must show past failures');
 
 // 6b. an LLM plan with no valid steps must NOT leave the agent catatonic
 s = SIM.createState();

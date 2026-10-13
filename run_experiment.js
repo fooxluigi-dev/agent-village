@@ -62,7 +62,8 @@ function observe(s, a) {
     }
     return `${o.name}: elsewhere (location unknown to you)`;
   }).join('\n');
-  const mem = a.memory.slice(-15).map(e => `[Day ${Math.floor(e.h / 24) + 1} ${SIM.clockOf(e.h)}] ${e.text}`).join('\n') || '(empty)';
+  const mem = a.memory.slice(-30).map(e => `[Day ${Math.floor(e.h / 24) + 1} ${SIM.clockOf(e.h)}] ${e.text}`).join('\n') || '(empty)';
+  const fails = (a.pastFails || []).join('; ') || '(none yet)';
   return `=== OBSERVE ===
 Time: Day ${SIM.dayOf(s.h)}, ${SIM.clockOf(s.h)} (virtual clock)
 You: ${a.name}
@@ -75,7 +76,9 @@ Last thought: ${a.thought || '(none)'}
 Other villagers:
 ${others}
 Your memory (newest last):
-${mem}`;
+${mem}
+Past failures (learn from these — don't repeat them):
+${fails}`;
 }
 
 function systemPrompt(a) {

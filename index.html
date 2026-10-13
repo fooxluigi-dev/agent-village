@@ -105,7 +105,7 @@
   function createState() {
     return {
       h: 0,
-      nodes: { food: { stock: 40, max: 60, tiles: 1, level: 1 }, water: { stock: 26, max: 36, tiles: 1, level: 1 }, wood: { stock: 16, max: 26, tiles: 1, level: 1 } },
+      nodes: { food: { stock: 40, max: 60, tiles: 1, level: 1 }, water: { stock: 26, max: 36, tiles: 1, level: 1 }, wood: { stock: 24, max: 40, tiles: 1, level: 1 } },
       agents: NAMES.map(function (n, i) {
         return {
           id: i, name: n, loc: 'camp', inv: { food: 2, water: 1, wood: 0 },
@@ -124,6 +124,12 @@
   function remember(s, a, text) {
     a.memory.push({ h: s.h, text: text });
     if (a.memory.length > 40) a.memory.shift();
+  }
+  // failed actions live in their own deduped list so they never flood the social memory
+  function rememberFail(a, action, reason) {
+    var k = action + ' (' + reason + ')';
+    var list = a.pastFails || (a.pastFails = []);
+    if (list.indexOf(k) < 0) { list.push(k); if (list.length > 8) list.shift(); }
   }
   function dur(st) {
     if (st.action === 'till') return 6;
@@ -232,7 +238,7 @@
     if (s.h % 4 === 0) {
       for (var r in s.nodes) {
         var nd = s.nodes[r];
-        var regen = nd.tiles * nd.level * (r === 'food' ? 2 : 1);  // cibo rigenera doppio: 4 bocche mangiano 24/giorno
+        var regen = nd.tiles * nd.level * (r === 'water' ? 1 : 2);  // cibo+legna doppio (4 bocche mangiano 24/giorno, bruciano ~60 legna/sett); acqua basta così
         if (nd.stock < nd.max) nd.stock = Math.min(nd.max, nd.stock + regen);
       }
     }
@@ -250,6 +256,7 @@
         var res = applyAction(s, a, st);
         if (!res.ok) {
           out(s, 'fail', a.name, '✖ "' + desc(st) + '" failed: ' + res.text + ' — step skipped');
+          rememberFail(a, st.action, res.text);
           a.pi++;
           a.status = 'skipped ✖';
           if (a.pi >= a.plan.length) { a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true; }
