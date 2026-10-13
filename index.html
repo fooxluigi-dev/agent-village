@@ -100,7 +100,7 @@
     'till: 6h at farm|well|forest — upgrades that node (production +1 per 4h). Costs one day of the OTHER two resources',
     'create: 24h at farm|well|forest — adds a new tile there (more production forever). Costs one WEEK of the OTHER two resources'
   ];
-  var NAMES = ['Ada', 'Bram', 'Cia'];
+  var NAMES = ['Ada', 'Bram', 'Cia', 'Dario'];
 
   function createState() {
     return {
@@ -517,8 +517,8 @@ function buildVillage() {
 }
 
 // ---------- villaggi: personaggio rigged + animazioni CC0 ----------
-var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b];
-function SIM_NAMES() { return ['Ada', 'Bram', 'Cia']; }
+var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b, 0xb48ade];
+function SIM_NAMES() { return ['Ada', 'Bram', 'Cia', 'Dario']; }
 var meshes = [];             // { g, mixer, cur, curAction, px, pz } — compilato async
 var CHAR_ANIMS = {};
 var FACING_FIX = Math.PI;    // se il modello guarda al contrario, togli/reimposta
@@ -733,7 +733,7 @@ function renderCards(force) {
     ags.forEach(function (a, i) {
       var d = document.createElement('div');
       d.className = 'card'; d.id = 'card' + i;
-      d.innerHTML = '<h4 style="color:' + ['#d4a017', '#5ac8fa', '#ff6b6b'][i] + '">' + a.name + '</h4>' +
+      d.innerHTML = '<h4 style="color:' + ['#d4a017', '#5ac8fa', '#ff6b6b', '#b48ade'][i] + '">' + a.name + '</h4>' +
         '<div class="doing" id="do' + i + '"></div>' +
         '<div class="goal" id="go' + i + '"></div>' +
         '<div class="inv" id="iv' + i + '"></div>' +
@@ -822,12 +822,13 @@ function loop(now) {
   dayNight();
   // smooth position interpolation toward each villager's location
   var ags = frameAgents();
-  if (ags && meshes.length === ags.length) {
+  if (ags && meshes.length >= ags.length) {
     var perLoc = {};
     for (var q = 0; q < ags.length; q++) { // stack co-located villagers so nobody hides
       perLoc[ags[q].loc] = (perLoc[ags[q].loc] || 0);
       ags[q]._stack = perLoc[ags[q].loc]++;
     }
+    for (var i = ags.length; i < meshes.length; i++) meshes[i].g.visible = false;  // replay vecchi a 3
     for (var i = 0; i < ags.length; i++) {
       var L = SIM.LOCS[ags[i].loc] || [8, 8];
       var st = ags[i]._stack;

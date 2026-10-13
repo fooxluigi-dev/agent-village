@@ -17,7 +17,17 @@ const MINIMAL = process.argv.includes('--minimal'); // stripped prompt: only Lui
 const KEY = fs.readFileSync(process.env.HOME + '/.hermes/.env', 'utf8')
   .split('\n').find(l => l.startsWith('OPENROUTER_API_KEY=')).split('=')[1].trim();
 
+// DeepSeek direct (Dario): key dal provider api.deepseek.com in ~/.hermes/config.yaml — never log it
+const DKEY = (fs.readFileSync(process.env.HOME + '/.hermes/config.yaml', 'utf8')
+  .match(/api\.deepseek\.com:\s*\n(?:\s+\S+:.*\n)*?\s+api_key:\s*(\S+)/) || [])[1];
+if (!DKEY) throw new Error('deepseek key not found in config.yaml');
+
 const PERSONAS = {
+  Dario: {
+    model: 'deepseek-chat', provider: 'deepseek',
+    persona: 'Stoic and practical. You came from a bigger world and trust systems, numbers and patience over impulse. You work steadily, plan for the long term, and believe the village survives if everyone does their share.',
+    goal: 'Make the village stable and self-sufficient so nobody ever starves again.'
+  },
   Ada: {
     model: 'inclusionai/ling-3.0-flash',
     persona: 'Cautious and methodical. You plan ahead and hate being caught unprepared. You prefer self-reliance over trusting others, and you always keep a reserve of supplies.',
@@ -120,7 +130,10 @@ function parseLLM(text) {
 }
 
 async function callLLM(a) {
-  const model = PERSONAS[a.name].model;
+  const P = PERSONAS[a.name];
+  const model = P.model;
+  const URL_ = P.provider === 'deepseek' ? 'https://api.deepseek.com/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
+  const AUTH = P.provider === 'deepseek' ? DKEY : KEY;
   const body = {
     model,
     temperature: 0.9,
@@ -134,9 +147,9 @@ async function callLLM(a) {
     try {
       const ctl = new AbortController();
       const to = setTimeout(() => ctl.abort(), 90000);
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch(URL_, {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': 'Bearer ' + AUTH, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: ctl.signal
       });

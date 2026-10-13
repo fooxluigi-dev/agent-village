@@ -130,4 +130,4 @@ for (const a of s.agents) {
 check(s.log.every(e => ['decision', 'event', 'fail', 'death', 'local'].includes(e.kind)), 'unknown log kind');
 
 console.log('ok  engine checks passed · survivors=' + s.agents.filter(a => a.alive).length +
-  '/3 after 72h local · log=' + s.log.length);
+  '/' + s.agents.length + ' after 72h local · log=' + s.log.length);
