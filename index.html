@@ -220,6 +220,11 @@
           if (a.pi >= a.plan.length) { a.plan = []; a.pi = 0; a.status = 'idle'; a.needsDecision = true; }
         } else {
           st._left = (st._left || dur(st)) - 1;
+          // long jobs (till/create): work doesn't stop for hunger — the worker eats mid-work from their own pack
+          if ((st.action === 'till' || st.action === 'create') && a.hunger > 70 && a.inv.food > 0) {
+            a.inv.food--; a.hunger = Math.max(0, a.hunger - 50);
+            out(s, 'event', a.name, '🍽 ' + a.name + ' ate mid-work (' + desc(st) + ')');
+          }
           a.status = desc(st) + ' · ' + res.text;
           if (st._left <= 0) {
             a.pi++;
