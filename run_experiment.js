@@ -70,9 +70,10 @@ ${mem}`;
 
 function systemPrompt(a) {
   if (MINIMAL) {
-    return `You are a villager in a survival simulation. You know exactly two things, and nothing else:
+    return `You are a villager in a survival simulation. You know exactly three things, and nothing else:
 1. To live you need food.
 2. Food must be grown or bought.
+3. Death is horrible — stay alive.
 
 ACTIONS (the engine enforces these): ${SIM.ACTIONS.join('; ')}.
 Your vitals change over time; health reaching 0 means death. Your plan runs hour by hour until done, until a step fails, or until your vitals interrupt it.
