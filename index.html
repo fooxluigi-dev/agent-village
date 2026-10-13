@@ -6,32 +6,64 @@
 <title>Agent Village — Phase 2</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a;color:#e8e8e8;
-    font-family:ui-monospace,Menlo,monospace;-webkit-user-select:none;user-select:none}
-  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:12px;align-items:center;
-    padding:8px 10px;background:linear-gradient(#0a0a0af2,#0a0a0a00);font-size:13px;z-index:6;flex-wrap:wrap}
-  .gold{color:#d4a017}
-  #mode{font-size:11px;padding:2px 6px;border:1px solid #333;border-radius:4px;color:#888}
+    font-family:ui-monospace,Menlo,monospace;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent}
+  canvas{display:block;touch-action:none}
+  /* ---- HUD: transparente, il mondo è protagonista ---- */
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;
+    padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));
+    background:linear-gradient(#0a0a0ae6,#0a0a0a00);font-size:13px;z-index:6;flex-wrap:wrap;
+    pointer-events:none}
+  #hud>*{pointer-events:auto}
+  .gold{color:#d4a017;font-weight:700;letter-spacing:.5px}
+  #mode{font-size:10px;padding:2px 6px;border:1px solid #333;border-radius:10px;color:#888;
+    white-space:nowrap}
   #mode.replay{border-color:#d4a017;color:#d4a017}
-  button{background:#1a1a1a;color:#e8e8e8;border:1px solid #333;border-radius:6px;
-    padding:3px 9px;font:inherit;cursor:pointer}
+  button{background:#141414d9;color:#e8e8e8;border:1px solid #333;border-radius:8px;
+    padding:6px 10px;font:inherit;font-size:12px;cursor:pointer;min-height:30px}
   button.on{border-color:#d4a017;color:#d4a017}
-  #cards{position:fixed;top:44px;left:0;right:0;display:flex;gap:8px;padding:6px 10px;
-    overflow-x:auto;z-index:5;font-size:12px}
-  .card{min-width:190px;background:#0a0a0ae6;border:1px solid #262626;border-radius:8px;padding:7px 9px}
+  /* ---- card agenti: compatte, scroll orizzontale ---- */
+  #cards{position:fixed;top:42px;left:0;right:0;display:flex;gap:6px;padding:4px 8px;
+    overflow-x:auto;z-index:5;font-size:11px;scrollbar-width:none}
+  #cards::-webkit-scrollbar{display:none}
+  .card{min-width:150px;flex:1 1 150px;max-width:230px;background:#0d0d0de0;border:1px solid #262626;
+    border-radius:10px;padding:6px 8px;backdrop-filter:blur(6px)}
   .card.dead{opacity:.45;border-color:#5a1a1a}
-  .card h4{margin:0 0 3px;font-size:13px}
-  .doing{color:#5ac8fa;min-height:15px}
-  .goal{color:#999;font-size:11px;min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .inv{font-size:11px;margin:3px 0}
-  .row{display:flex;justify-content:space-between;font-size:10px;margin:2px 0 1px;color:#aaa}
-  .bar{height:6px;background:#222;border-radius:3px;overflow:hidden}
+  .card h4{margin:0 0 2px;font-size:12px;display:flex;justify-content:space-between}
+  .doing{color:#5ac8fa;min-height:13px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .goal{color:#777;font-size:10px;min-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inv{font-size:10px;margin:3px 0 2px;color:#bbb}
+  .row{display:flex;justify-content:space-between;font-size:9px;margin:2px 0 1px;color:#888}
+  .bar{height:5px;background:#1e1e1e;border-radius:3px;overflow:hidden}
   .bar i{display:block;height:100%;width:0;transition:width .3s}
-  #log{position:fixed;left:0;right:0;bottom:0;height:32vh;overflow-y:auto;
-    background:#0a0a0af2;border-top:1px solid #262626;padding:6px 10px;font-size:11px;z-index:5}
+  /* ---- registro: richiudibile ---- */
+  #log{position:fixed;left:0;right:0;bottom:0;height:30vh;overflow-y:auto;
+    background:#0a0a0af0;border-top:1px solid #262626;padding:6px 10px;padding-bottom:max(6px,env(safe-area-inset-bottom));
+    font-size:11px;z-index:5;transition:height .2s}
+  #log.collapsed{height:30px;padding-top:6px;overflow:hidden}
   #log div{margin:2px 0;white-space:pre-wrap}
   .k-decision{color:#d4a017}.k-event{color:#7ee787}.k-fail{color:#ff6b6b}
   .k-death{color:#ff4444;font-weight:bold}.k-local{color:#888}.k-h{color:#555;margin-top:6px!important}
   .t{color:#555}
+  #bLog{position:fixed;right:8px;bottom:calc(30vh + 8px);z-index:7;min-height:34px;min-width:38px;
+    background:#141414e6}
+  #log.collapsed~#bLog{bottom:38px}
+  @media (max-width:640px){
+    /* HUD in UNA riga sola: niente wrap che copre le card */
+    #hud{gap:5px;font-size:11px;flex-wrap:nowrap;overflow:hidden;white-space:nowrap;padding:6px 8px}
+    .gold{font-size:11px;letter-spacing:0}
+    #mode{display:none}
+    #clock{font-size:11px}
+    button{padding:5px 7px;font-size:11px;min-height:28px;min-width:30px}
+    #cards{top:38px;gap:4px;padding:4px 6px}
+    .card{min-width:0;flex:1 1 0;padding:5px 6px}
+    .inv{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* log collassato: solo l'ultima riga, mai tagliata */
+    #log.collapsed{height:34px;padding-bottom:4px}
+    #log.collapsed div{display:none}
+    #log.collapsed div:last-child{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #bLog{bottom:42px;min-height:30px;min-width:34px}
+  }
 </style>
 </head>
 <body>
@@ -46,6 +78,7 @@
 </div>
 <div id="cards"></div>
 <div id="log"></div>
+<button id="bLog" title="log">📜</button>
 
 <script id="sim">
 /* Pure engine: virtual clock, 3 villagers, resources, plans, validated actions.
@@ -305,16 +338,22 @@
 
 <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/utils/SkeletonUtils.js"></script>
 <script>
 // ---------- 3D scene ----------
 var scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a0a);
+scene.background = new THREE.Color(0x8fc4e8);
+scene.fog = new THREE.Fog(0x8fc4e8, 30, 75);
 var renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
-// ponytail: no shadow maps (mobile perf)
-var camD = 16;
+function calcCamD() { return (innerWidth >= innerHeight) ? 10.5 : 13.5; }
+var camD = calcCamD();
 var camera = new THREE.OrthographicCamera(-camD * (innerWidth / innerHeight), camD * (innerWidth / innerHeight), camD, -camD, 0.1, 300);
 camera.position.set(18, 20, 18);
 camera.lookAt(0, 0, 0);
@@ -323,39 +362,219 @@ controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.maxPolarAngle = 1.45;
 controls.minZoom = 0.5; controls.maxZoom = 4;
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x223322, 0.9));
-var sun = new THREE.DirectionalLight(0xffffff, 0.7);
-sun.position.set(10, 20, 6);
+var hemi = new THREE.HemisphereLight(0xdfe8ff, 0x35502a, 0.45);
+scene.add(hemi);
+var sun = new THREE.DirectionalLight(0xfff2dd, 1.2);
+sun.position.set(14, 20, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -15; sun.shadow.camera.right = 15;
+sun.shadow.camera.top = 15; sun.shadow.camera.bottom = -15;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 70;
+sun.shadow.bias = -0.0006; sun.shadow.radius = 3;
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
+var fireLight = new THREE.PointLight(0xff7722, 0, 9, 1.7);
+fireLight.position.set(8 - 8, 1.1, 8 - 8);
+scene.add(fireLight);
 function W(gx) { return gx - 8; }
 
-var ground = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshLambertMaterial({ color: 0x2f5e33 }));
-ground.rotation.x = -Math.PI / 2;
+// diorama slab: erba sopra, terra sotto
+var MAT_SOIL = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
+var MAT_TOP = new THREE.MeshLambertMaterial({ color: 0x3f8f45 });
+var ground = new THREE.Mesh(new THREE.BoxGeometry(16, 1.2, 16),
+  [MAT_SOIL, MAT_SOIL, MAT_TOP, MAT_SOIL, MAT_SOIL, MAT_SOIL]);
+ground.position.y = -0.6;
+ground.receiveShadow = true;
 scene.add(ground);
-var grid = new THREE.GridHelper(16, 16, 0x3a7c40, 0x2a5c2f);
-grid.position.y = 0.01;
-scene.add(grid);
 
-// farm (food)
-var farm = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.12, 4.5), new THREE.MeshLambertMaterial({ color: 0x6b4a2a }));
-farm.position.set(W(3), 0.06, W(3)); scene.add(farm);
-for (var j = 0; j < 4; j++) {
-  var row = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.18, 0.5), new THREE.MeshLambertMaterial({ color: 0x4caf50 }));
-  row.position.set(W(3), 0.15, W(3) - 1.5 + j); scene.add(row);
+// seeded rng (stessa scena a ogni reload)
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+var rnd = mulberry32(42);
+
+// ---------- asset CC0 (scaricati nel repo) ----------
+var loader = new THREE.GLTFLoader();
+function loadGLB(url) { return new Promise(function (res) { loader.load(url, res, undefined, function () { res(null); }); }); }
+var MODELS = {};   // name -> proto group (cloned on use)
+function inst(name, x, z, ry, sc) {
+  var proto = MODELS[name];
+  if (!proto) return null;
+  var o = proto.clone(true);
+  o.rotation.y = ry || 0;
+  o.scale.setScalar((SCALE[name] || 1) * (sc || 1));
+  var bb = new THREE.Box3().setFromObject(o);
+  o.position.set(W(x), -bb.min.y, W(z));  // sempre a terra, mai sepolto/galleggiante
+  o.traverse(function (c) { if (c.isMesh) { c.castShadow = true; } });
+  scene.add(o);
+  return o;
 }
-// well (water)
-var well = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1, 1, 10), new THREE.MeshLambertMaterial({ color: 0x778899 }));
-well.position.set(W(4), 0.5, W(12)); scene.add(well);
-var wWater = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.2, 10), new THREE.MeshLambertMaterial({ color: 0x3388dd }));
-wWater.position.set(W(4), 1.0, W(12)); scene.add(wWater);
-// forest (wood)
-[[12, 4], [13, 5.5], [11, 5.5], [13, 3], [11.5, 2.5]].forEach(function (p) {
-  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.4, 6), new THREE.MeshLambertMaterial({ color: 0x6b4226 }));
-  trunk.position.set(W(p[0]), 0.7, W(p[1])); scene.add(trunk);
-  var crown = new THREE.Mesh(new THREE.ConeGeometry(1, 2.2, 7), new THREE.MeshLambertMaterial({ color: 0x2d6b33 }));
-  crown.position.set(W(p[0]), 2.3, W(p[1])); scene.add(crown);
+var NATURE = ['tree_oak','tree_default','tree_detailed','tree_fat','tree_pineTallA','tree_pineRoundA','tree_simple','tree_blocks',
+  'rock_largeA','rock_largeC','rock_smallA','rock_smallD','rock_tallA','plant_bush','plant_bushLarge','grass_large','grass',
+  'flower_redA','flower_yellowA','flower_purpleA','crops_dirtRow','crops_wheatStageB','crops_cornStageC','crop_pumpkin',
+  'tent_detailedOpen','tent_smallClosed','campfire_stones','log_stack','stump_round','mushroom_tanGroup',
+  'ground_pathStraight','ground_pathTile','ground_pathEnd','sign'];
+var TOWN = ['windmill','fountain-round','fence','fence-gate','fence-curved','lantern','cart','stall-green','road','hedge','rock-small'];
+// Nature Kit è a metà scala rispetto a Fantasy Town Kit → ×2 tranne colture/sentieri
+var SCALE = {};
+NATURE.concat(TOWN).forEach(function (n) {
+  if (/^(crops_|crop_|ground_|road|stall|cart|lantern|fence|hedge|windmill|fountain)/.test(n)) SCALE[n] = 1;
+  else SCALE[n] = 2;
 });
-// resource tiles: 1 mesh per tile, count = tiles, color brightness = level
+SCALE['campfire_stones'] = 3; SCALE['tent_detailedOpen'] = 2.4; SCALE['tent_smallClosed'] = 2.4;
+SCALE['sign'] = 1.6; SCALE['stump_round'] = 2;
+
+
+function buildVillage() {
+  // camp: accampamento con tende e falò (esiste da sempre)
+  inst('tent_detailedOpen', 6.7, 8.9, 0.7);
+  inst('tent_smallClosed', 9.3, 7.1, -0.9);
+  inst('campfire_stones', 8, 8, 0.4);
+  inst('lantern', 9.7, 9.5, 0);
+  inst('cart', 7.6, 6.3, -0.5);
+  // fattoria: mulino + recinto (la fattoria esiste sempre; le TESSERE compaiono con till/create)
+  inst('windmill', 5.9, 0.7, 0.5);
+  inst('sign', 5.5, 5.4, -0.6);
+  [[1.4,5.3,0],[2.8,5.3,0],[4.2,5.3,0],[5.3,4.1,1.57],[5.3,2.7,1.57],[5.3,1.3,1.57],[4.2,0.7,0],[2.8,0.7,0],[1.4,0.7,0]].forEach(function (f) { inst('fence', f[0], f[1], f[2]); });
+  inst('fence-gate', 1.4, 1.3, 0);
+  // pozzo → fontana (l'acqua esiste sempre)
+  inst('fountain-round', 4, 12, 0.3);
+  // foresta: alberi veri fuori dalla ringhiera delle tessere (raggio >= 3)
+  [['tree_oak',9.2,2.2],['tree_pineTallA',14.7,1.6],['tree_detailed',15.0,6.6],['tree_default',12.2,7.6],
+   ['tree_fat',9.4,6.4],['tree_pineRoundA',15.1,4.2],['tree_blocks',8.6,7.4],['tree_simple',13.9,0.9]]
+   .forEach(function (t) { inst(t[0], t[1], t[2], rnd() * 6.3); });
+  inst('log_stack', 8.8, 6.2, 0.5);
+  inst('stump_round', 15.1, 7.4, 0);
+  // sentieri verso i luoghi
+  inst('ground_pathTile', 4.9, 4.9, 0);
+  inst('ground_pathTile', 4.9, 11.0, 0);
+  inst('ground_pathTile', 10.3, 5.6, 0);
+  // vegetazione sparsa (seeded, lontano dai nodi)
+  var avoid = [[3,3],[4,12],[12,4],[8,8]];
+  var deco = ['rock_smallA','rock_smallD','plant_bush','plant_bushLarge','grass_large','flower_redA','flower_yellowA','flower_purpleA','mushroom_tanGroup','rock_largeA','rock_tallA'];
+  var placed = 0, tries = 0;
+  while (placed < 42 && tries < 400) {
+    tries++;
+    var x = 1 + rnd() * 14, z = 1 + rnd() * 14, ok = true;
+    for (var a = 0; a < avoid.length; a++) { var dx = x - avoid[a][0], dz = z - avoid[a][1]; if (dx * dx + dz * dz < 7) { ok = false; break; } }
+    if (!ok) continue;
+    inst(deco[Math.floor(rnd() * deco.length)], x, z, rnd() * 6.28, 0.8 + rnd() * 0.5);
+    placed++;
+  }
+}
+
+// ---------- villaggi: personaggio rigged + animazioni CC0 ----------
+var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b];
+function SIM_NAMES() { return ['Ada', 'Bram', 'Cia']; }
+var meshes = [];             // { g, mixer, cur, curAction, px, pz } — compilato async
+var CHAR_ANIMS = {};
+var FACING_FIX = Math.PI;    // se il modello guarda al contrario, togli/reimposta
+function buildVillagers(gltf) {
+  var proto = gltf ? gltf.scene : null;
+  if (proto && gltf.animations.length) {
+    gltf.animations.forEach(function (c) { CHAR_ANIMS[c.name] = c; });
+    // normalizza: altezza 1.45, piedi a y=0
+    var bb = new THREE.Box3().setFromObject(proto);
+    var hh = (bb.max.y - bb.min.y) || 1.6;
+    var sc = 1.25 / hh;
+    proto.scale.setScalar(sc);
+    proto.position.y = -bb.min.y * sc;
+    proto.rotation.y = FACING_FIX;
+  }
+  SIM_NAMES().forEach(function (nm, i) {
+    var wrap = new THREE.Group(), mixer = null;
+    var SK = window.SkeletonUtils || (window.THREE && THREE.SkeletonUtils);
+    if (proto && SK) {
+      var inner = SK.clone(proto);
+      inner.traverse(function (c) {
+        if (!c.isMesh) return;
+        c.castShadow = true;
+        var fix = function (m) {
+          m = m.clone();
+          if (m.color) m.color.setHex(COLORS[i]);
+          if ('metalness' in m) { m.metalness = 0; m.roughness = 0.85; }
+          return m;
+        };
+        c.material = Array.isArray(c.material) ? c.material.map(fix) : fix(c.material);
+      });
+      wrap.add(inner);
+      mixer = new THREE.AnimationMixer(inner);
+    } else {
+      // fallback: scatola (se l'asset non carica)
+      var body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), new THREE.MeshLambertMaterial({ color: COLORS[i] }));
+      body.position.y = 0.4; wrap.add(body);
+      var head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshLambertMaterial({ color: 0xf0d0a0 }));
+      head.position.y = 1.05; wrap.add(head);
+    }
+    scene.add(wrap);
+    meshes.push({ g: wrap, mixer: mixer, cur: null, curAction: null, px: 0, pz: 0 });
+  });
+}
+function clipFor(a) {
+  var s = a.status || 'idle';
+  if (a.alive === false) return null;
+  if (/^go/.test(s)) return 'Walk_Carry_Loop';
+  if (/^gather_food/.test(s)) return 'Farm_Harvest';
+  if (/^gather_wood/.test(s)) return 'TreeChopping_Loop';
+  if (/^gather_water/.test(s)) return 'Farm_Watering';
+  if (/^(till|create)/.test(s)) return 'Farm_PlantSeed';
+  if (/^(eat|drink)/.test(s)) return 'Consume';
+  if (/^rest/.test(s)) return 'Idle_FoldArms_Loop';
+  if (/^give/.test(s)) return 'OverhandThrow';
+  if (/^take/.test(s)) return 'Chest_Open';
+  if (/^say/.test(s)) return 'Idle_TalkingPhone_Loop';
+  return 'Idle_No_Loop';
+}
+function playAnim(m, name) {
+  if (!m.mixer) return;
+  if (m.cur === name) return;
+  var clip = name ? CHAR_ANIMS[name] : null;
+  if (!clip && name) return;              // clip assente: resta su quella corrente
+  if (m.curAction) m.curAction.fadeOut(0.25);
+  m.cur = name;
+  if (clip) { m.curAction = m.mixer.clipAction(clip); m.curAction.reset().fadeIn(0.25).play(); }
+  else m.curAction = null;
+}
+
+// carica tutto, poi costruisci
+Promise.all([
+  Promise.all(NATURE.map(function (n) { return loadGLB('assets/nature/' + n + '.glb'); })),
+  Promise.all(TOWN.map(function (n) { return loadGLB('assets/town/' + n + '.glb'); })),
+  loadGLB('assets/char/villager.glb')
+  ]).then(function (r) {
+  function put(name, gltf) {
+    if (!gltf) return;
+    var s = gltf.scene;
+    var bb = new THREE.Box3().setFromObject(s);
+    if (isFinite(bb.min.y)) s.position.y -= bb.min.y;  // piedi a y=0, mai sepolto/galleggiante
+    MODELS[name] = s;
+  }
+  NATURE.forEach(function (n, i) { put(n, r[0][i]); });
+  TOWN.forEach(function (n, i) { put(n, r[1][i]); });
+  buildVillage();
+  buildVillagers(r[2]);
+  window.__worldReady = true;
+});
+
+// ---------- day / night ----------
+var SKY_DAY = new THREE.Color(0x8fc4e8), SKY_NIGHT = new THREE.Color(0x0b1026), SKY_DUSK = new THREE.Color(0xe89a6a);
+var tmpC = new THREE.Color();
+function dayNight() {
+  var h = frameH() % 24;
+  var t = Math.max(0, Math.min(1, (h - 6) / 12));
+  var ang = Math.PI * t;
+  var day = Math.sin(ang);
+  sun.position.set(Math.cos(ang) * 16, 2 + day * 18, 7);
+  sun.intensity = 0.07 + day * 1.25;
+  hemi.intensity = 0.16 + day * 0.42;
+  sun.color.setHSL(0.09 + 0.03 * day, 0.6 - 0.5 * day, 0.55 + 0.4 * day);
+  tmpC.copy(SKY_NIGHT).lerp(SKY_DAY, day);
+  if (day > 0 && day < 0.4) tmpC.lerp(SKY_DUSK, (0.4 - day) * 1.4);
+  scene.background.copy(tmpC);
+  scene.fog.color.copy(tmpC);
+  fireLight.intensity = (1 - day) * (1.5 + Math.random() * 0.5);
+}
+
+// ---------- tessere coltivabili (till/create → quadratini in fattoria) ----------
 var TILE_POS = [[0, 1.8], [1.8, 0], [0, -1.8], [-1.8, 0], [1.8, 1.8], [-1.8, 1.8], [1.8, -1.8], [-1.8, -1.8]];
 var TILE_COL = { food: 0x5ecf4a, water: 0x3f9fe0, wood: 0x2d6b33 };
 var TILE_LOC = { food: 'farm', water: 'well', wood: 'forest' };
@@ -366,45 +585,40 @@ function frameNodesT() {
   for (var r in S.nodes) nt[r] = [S.nodes[r].tiles || 1, S.nodes[r].level || 1];
   return nt;
 }
+// ponytail: le tessere FOOD usano i campi coltivati del Nature Kit; water/wood restano box
+// colorati — upgrade: modelli propri per pozzi/foresta se servono
+// ponytail: tutte le tessere lavorate = zolla coltivata; il cibo matura (wheat/corn) col livello.
+// upgrade path: modello dedicato per acqua/legna se non basta
+function makeTileMesh(r, lv) {
+  if (MODELS['crops_dirtRow']) {
+    var grp = new THREE.Group();
+    grp.add(MODELS['crops_dirtRow'].clone(true));
+    var crop = (r === 'food') ? MODELS[lv >= 3 ? 'crops_cornStageC' : 'crops_wheatStageB'] : null;
+    if (crop && lv >= 2) { var w = crop.clone(true); w.position.y = 0.05; grp.add(w); }
+    grp.traverse(function (c) { if (c.isMesh) c.castShadow = true; });
+    return grp;
+  }
+  var b = Math.min(1.5, 0.75 + (lv - 1) * 0.18);
+  var m = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3),
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(TILE_COL[r]).multiplyScalar(b) }));
+  m.castShadow = true;
+  return m;
+}
 function syncTiles() {
   var nt = frameNodesT();
   for (var r in nt) {
-    var t = nt[r][0], lv = nt[r][1], arr = nodeTiles[r], c = new THREE.Color(TILE_COL[r]);
-    var b = Math.min(1.5, 0.75 + (lv - 1) * 0.18);
-    while (arr.length > t) scene.remove(arr.pop().mesh);
+    var t = nt[r][0], lv = nt[r][1], arr = nodeTiles[r];
+    while (arr.length > t) scene.remove(arr.pop());
     while (arr.length < t) {
       var i = arr.length, off = TILE_POS[i] || [0, 2.8 + i * 0.6];
-      var m = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3),
-        new THREE.MeshLambertMaterial({ color: c.clone().multiplyScalar(b) }));
-      var L0 = LOCS[TILE_LOC[r]];
-      m.position.set(W(L0[0] + off[0]), 0.07, W(L0[1] + off[1]));
+      var L0 = SIM.LOCS[TILE_LOC[r]];
+      var m = makeTileMesh(r, lv);
+      m.position.set(W(L0[0] + off[0]), r === 'food' ? 0.06 : 0.07, W(L0[1] + off[1]));
       scene.add(m);
-      arr.push({ mesh: m, lv: lv });
-    }
-    for (var k = 0; k < arr.length; k++) {
-      var nb = Math.min(1.5, 0.75 + (lv - 1) * 0.18);
-      if (arr[k].lv !== lv) { arr[k].mesh.material.color.set(TILE_COL[r]).multiplyScalar(nb); arr[k].lv = lv; }
+      arr.push(m);
     }
   }
 }
-// camp
-var fire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 7), new THREE.MeshLambertMaterial({ color: 0xff8822 }));
-fire.position.set(W(8), 0.5, W(8)); scene.add(fire);
-var ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 6, 12), new THREE.MeshLambertMaterial({ color: 0x555555 }));
-ring.rotation.x = Math.PI / 2; ring.position.set(W(8), 0.1, W(8)); scene.add(ring);
-
-// villagers
-var COLORS = [0xd4a017, 0x5ac8fa, 0xff6b6b];
-var meshes = SIM_NAMES().map(function (n, i) {
-  var g = new THREE.Group();
-  var body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), new THREE.MeshLambertMaterial({ color: COLORS[i] }));
-  body.position.y = 0.4;
-  var head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshLambertMaterial({ color: 0xf0d0a0 }));
-  head.position.y = 1.05;
-  g.add(body); g.add(head); scene.add(g);
-  return { g: g, px: 8, pz: 8 };
-});
-function SIM_NAMES() { return ['Ada', 'Bram', 'Cia']; }
 
 // ---------- state: replay of the LLM experiment, or live local-brain mode ----------
 var mode = 'live';          // 'replay' | 'live'
@@ -433,6 +647,10 @@ document.getElementById('bPlay').onclick = function () {
   this.textContent = playing ? '⏸' : '▶';
   this.classList.toggle('on', playing);
 };
+document.getElementById('bLog').onclick = function () {
+  document.getElementById('log').classList.toggle('collapsed');
+};
+if (innerWidth < 700) document.getElementById('log').classList.add('collapsed');
 Array.prototype.forEach.call(document.querySelectorAll('.spd'), function (b) {
   b.onclick = function () {
     speed = +b.dataset.s;
@@ -540,9 +758,10 @@ function loop(now) {
     }
   }
   updateClock();
+  dayNight();
   // smooth position interpolation toward each villager's location
   var ags = frameAgents();
-  if (ags) {
+  if (ags && meshes.length === ags.length) {
     var perLoc = {};
     for (var q = 0; q < ags.length; q++) { // stack co-located villagers so nobody hides
       perLoc[ags[q].loc] = (perLoc[ags[q].loc] || 0);
@@ -551,15 +770,20 @@ function loop(now) {
     for (var i = 0; i < ags.length; i++) {
       var L = SIM.LOCS[ags[i].loc] || [8, 8];
       var st = ags[i]._stack;
-      var tx = W(L[0]) + (st % 2 ? 0.9 : -0.9) * Math.min(st, 2) * 0.5;
-      var tz = W(L[1]) + (st > 1 ? 0.9 : 0);
+      var tx = W(L[0]) + (st % 2 ? 0.9 : -0.9) * Math.min(st, 2) * 0.8;
+      var tz = W(L[1]) + (st > 1 ? 1.3 : 0);
       var m = meshes[i];
       var nx = m.px + (tx - m.px) * Math.min(1, dt / 400);
       var nz = m.pz + (tz - m.pz) * Math.min(1, dt / 400);
       m.g.position.set(nx, 0, nz);
       m.g.visible = ags[i].alive !== false;
-      if (Math.abs(tx - nx) > 0.01 || Math.abs(tz - nz) > 0.01) m.g.rotation.y = Math.atan2(tx - nx, tz - nz);
+      var dx = tx - nx, dz = tz - nz;
+      if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) m.g.rotation.y = Math.atan2(dx, dz);
       m.px = nx; m.pz = nz;
+      // anim: cammina se si muove, altrimenti lo stato del piano
+      var moving = Math.abs(dx) > 0.015 || Math.abs(dz) > 0.015;
+      playAnim(m, moving ? 'Walk_Carry_Loop' : clipFor(ags[i]));
+      if (m.mixer) m.mixer.update(dt / 1000);
     }
   }
   syncTiles();
@@ -571,8 +795,10 @@ requestAnimationFrame(loop);
 
 addEventListener('resize', function () {
   renderer.setSize(innerWidth, innerHeight);
+  camD = calcCamD();
   camera.left = -camD * (innerWidth / innerHeight);
   camera.right = camD * (innerWidth / innerHeight);
+  camera.top = camD; camera.bottom = -camD;
   camera.updateProjectionMatrix();
 });
 </script>
