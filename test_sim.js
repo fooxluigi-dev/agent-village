@@ -121,6 +121,7 @@ check(ada.memory.every(e => !e.text.includes('failed')), 'fails must stay out of
 const runner = fs.readFileSync(__dirname + '/run_experiment.js', 'utf8');
 check(runner.includes('.slice(-30)'), 'observe must show 30 memory entries');
 check(runner.includes('Past failures'), 'observe must show past failures');
+check(runner.includes('Learn from what happens'), 'minimal prompt must carry rule 4 (learn + be creative)');
 
 // 6b. an LLM plan with no valid steps must NOT leave the agent catatonic
 s = SIM.createState();
