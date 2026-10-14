@@ -30,7 +30,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       let o = {};
       try { o = JSON.parse(body || '{}'); } catch (e) {}
-      const hours = Math.min(168, Math.max(6, +o.hours || 72));
+      const hours = Math.min(720, Math.max(6, +o.hours || 72));  // cap 30 giorni, la run lunga è 15 (360h)
       try { fs.unlinkSync(path.join(ROOT, 'experiment-live.json')); } catch (e) {}  // niente dati stale di run precedenti
       const args = [path.join(ROOT, 'run_experiment.js'), String(hours)];
       if (o.minimal) args.push('--minimal');
