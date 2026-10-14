@@ -97,8 +97,8 @@
     'take(who,what,n): take n from a villager at your location (they WILL notice)',
     'say(who,text): speak to a villager at your location (enters their memory)',
     'wait: 1h doing nothing',
-    'till: 6h at farm|well|forest — upgrades that node (production +1 per 4h). Costs one day of the OTHER two resources',
-    'create: 24h at farm|well|forest — adds a new tile there (more production forever). Costs one WEEK of the OTHER two resources'
+    'till: 6h at farm|well|forest — upgrades that node (production +1 per 4h). Costs one day of the OTHER two resources, paid from YOUR packs',
+    'create: 24h at farm|well|forest — adds a new tile there (more production forever). Costs one WEEK of the OTHER two resources, paid from YOUR packs'
   ];
   var NAMES = ['Ada', 'Bram', 'Cia', 'Dario'];
 
@@ -163,19 +163,21 @@
         s.nodes[r].stock -= t; a.inv[r] += t;
         return { ok: true, text: '+' + t + ' ' + r };
       case 'till': case 'create': {
-        // ponytail: baseline costs (day=6, week=42 of the other two resources from node stock).
+        // ponytail: costs (day=6, week=42 of the OTHER two) paid from the WORKER's packs —
+        // everything in this village ends up hoarded in inventories while the nodes sit empty,
+        // so charging the node made expansion impossible forever (4 runs, 0 successes).
         // upgrade path: scale cost with current production if baseline inflates.
         var res = { farm: 'food', well: 'water', forest: 'wood' }[a.loc];
         if (!res) return { ok: false, text: 'nothing to work here' };
         var others = ['food', 'water', 'wood'].filter(function (x) { return x !== res; });
         var mult = st.action === 'create' ? 42 : 6;
         for (var oi = 0; oi < others.length; oi++) {
-          if (s.nodes[others[oi]].stock < mult)
-            return { ok: false, text: 'needs ' + mult + ' ' + others[oi] + ' in the node to sacrifice' };
+          if (a.inv[others[oi]] < mult)
+            return { ok: false, text: 'needs ' + mult + ' ' + others[oi] + ' in your packs to sacrifice' };
         }
-        // validate every hour (fail fast if stock drops mid-work), pay+apply ONLY on the final hour
+        // validate every hour (fail fast if packs drain mid-work), pay+apply ONLY on the final hour
         if (st._left !== 1) return { ok: true, text: 'working the ' + a.loc };
-        for (oi = 0; oi < others.length; oi++) s.nodes[others[oi]].stock -= mult;
+        for (oi = 0; oi < others.length; oi++) a.inv[others[oi]] -= mult;
         var nd = s.nodes[res];
         if (st.action === 'till') nd.level++; else nd.tiles++;
         nd.max = 24 + nd.tiles * nd.level * 12;

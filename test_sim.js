@@ -36,19 +36,21 @@ ada.health = 50; ada.inv.water = 1;
 SIM.applyAction(s, ada, { action: 'drink' });
 check(ada.health === 65, 'drink +15 expected');
 
-// 3b. till/create: cost from NODE stock, till lv+1 (6h), create tiles+1 (24h), paid on final hour
+// 3b. till/create: cost from the WORKER's packs (nodes untouched), till lv+1 (6h), create tiles+1 (24h), paid on final hour
 s = SIM.createState();
 ada = s.agents[0];
 check(!SIM.applyAction(s, ada, { action: 'till' }).ok, 'till at camp must fail (no node)');
 SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
-s.nodes.wood.stock = 3;
-check(!SIM.applyAction(s, ada, { action: 'till' }).ok, 'till must fail fast when node stock is low');
-s.nodes.wood.stock = 20; s.nodes.wood.max = 20; s.nodes.water.stock = 20; s.nodes.water.max = 20;  // max=stock blocks regen noise
+ada.inv.wood = 3;
+check(!SIM.applyAction(s, ada, { action: 'till' }).ok, 'till must fail fast when packs are light');
+s.nodes.wood.stock = 7; s.nodes.wood.max = 7; s.nodes.water.stock = 7; s.nodes.water.max = 7;  // max=stock blocks regen noise
+ada.inv.wood = 20; ada.inv.water = 20;
 SIM.setPlan(s, ada, [{ action: 'till' }], 't', 'g');
 for (let i = 0; i < 6; i++) SIM.tick(s);
 check(s.nodes.food.level === 2, 'till must apply once after 6h, level ' + s.nodes.food.level);
-check(s.nodes.wood.stock === 14 && s.nodes.water.stock === 14, 'till must pay 6+6 ONCE, wood ' + s.nodes.wood.stock + ' water ' + s.nodes.water.stock);
-s.nodes.wood.stock = 50; s.nodes.water.stock = 50;
+check(ada.inv.wood === 14 && ada.inv.water === 14, 'till must pay 6+6 ONCE from packs, wood ' + ada.inv.wood + ' water ' + ada.inv.water);
+check(s.nodes.wood.stock === 7 && s.nodes.water.stock === 7, 'till must NOT touch node stock, wood ' + s.nodes.wood.stock);
+ada.inv.wood = 50; ada.inv.water = 50;
 ada.hunger = 0; ada.health = 100; ada.inv.food = 0;  // empty pack: no mid-work eating, hunger will hurt for real
 SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
 for (let i = 0; i < 24; i++) SIM.tick(s);
@@ -57,20 +59,20 @@ check(ada.health < 100 && ada.hunger === 100, '24h job on full hunger must cost 
 // mid-work eating: worker with food in the pack survives a 24h job unharmed
 s = SIM.createState(); ada = s.agents[0];
 SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
-s.nodes.wood.stock = 50; s.nodes.water.stock = 50;
+ada.inv.wood = 50; ada.inv.water = 50;
 ada.hunger = 0; ada.health = 100; ada.energy = 100; ada.inv.food = 3;  // rested worker: only hunger could hurt
 SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
 for (let i = 0; i < 24; i++) SIM.tick(s);
 check(s.nodes.food.tiles === 2, 'create with food pack must complete');
 check(ada.inv.food < 3, 'must have eaten mid-work, food left ' + ada.inv.food);
 check(ada.health === 100, 'eating mid-work must prevent health damage, got ' + ada.health);
-check(s.nodes.wood.stock === 8 && s.nodes.water.stock === 8, 'create must pay 42+42 ONCE, wood ' + s.nodes.wood.stock);
+check(ada.inv.wood === 8 && ada.inv.water === 8, 'create must pay 42+42 ONCE from packs, wood ' + ada.inv.wood + ' water ' + ada.inv.water);
 // interrupted create: no tile, no payment
-s.nodes.wood.stock = 50; s.nodes.water.stock = 50;
+ada.inv.wood = 50; ada.inv.water = 50;
 ada.health = 25;  // low health interrupts EVERYTHING, work included
 SIM.setPlan(s, ada, [{ action: 'create' }], 't', 'g');
 for (let i = 0; i < 3; i++) SIM.tick(s);
-check(s.nodes.food.tiles === 2 && s.nodes.wood.stock === 50, 'interrupted create must pay nothing');
+check(s.nodes.food.tiles === 2 && ada.inv.wood === 50 && ada.inv.water === 50, 'interrupted create must pay nothing');
 
 // regen: food+wood double (4 mouths eat ~24/day, burn ~60 wood/week); water keeps tiles·level
 s = SIM.createState();
@@ -129,6 +131,22 @@ check(!ada.needsDecision && ada.status !== 'idle' || ada.status === 'idle',
   'agent must have an executable plan');
 SIM.tick(s);
 check(s.log.some(e => e.text.includes('no valid steps')), 'fallback must be logged');
+
+// 6c. till is paid from the WORKER's packs — empty nodes must not block expansion
+s = SIM.createState(); ada = s.agents[0];
+ada.inv.water = 6; ada.inv.wood = 6;
+s.nodes.water.stock = 0; s.nodes.wood.stock = 0;
+SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
+SIM.setPlan(s, ada, [{ action: 'till' }], '', '');
+for (let i = 0; i < 8; i++) SIM.tick(s);
+check(s.nodes.food.level === 2, 'till must upgrade farm even with empty nodes, level=' + s.nodes.food.level);
+check(ada.inv.water === 0 && ada.inv.wood === 0, 'till must pay exactly 6+6 from packs, got ' + JSON.stringify(ada.inv));
+// no packs -> fail fast, reason lands in pastFails
+s = SIM.createState(); ada = s.agents[0];
+SIM.applyAction(s, ada, { action: 'go', place: 'farm' });
+SIM.setPlan(s, ada, [{ action: 'till' }], '', '');
+SIM.tick(s);
+check(ada.pastFails && ada.pastFails.join('').includes('packs'), 'till fail must be remembered with packs reason: ' + JSON.stringify(ada.pastFails));
 
 // 7. local brain never breaks invariants (72h smoke, all agents)
 s = SIM.createState();
